@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeIndianPhone, safeNext, signUpSchema } from '@/modules/auth/schemas';
+import { loginSchema, normalizeIndianPhone, safeNext, signUpSchema } from '@/modules/auth/schemas';
 
 describe('normalizeIndianPhone', () => {
   it.each([
@@ -42,5 +42,32 @@ describe('safeNext', () => {
     ['', '/'],
   ])('%s → %s', (input, expected) => {
     expect(safeNext(input)).toBe(expected);
+  });
+});
+
+describe('safeNext open-redirect cases', () => {
+  it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '//evil.com', '/\\evil.com', 'https://evil.com', '%2F%2Fevil.com'])(
+    'rejects %j',
+    (input) => {
+      expect(safeNext(input)).toBe('/');
+    },
+  );
+  it('keeps path, query and hash', () => {
+    expect(safeNext('/dashboard/trips?x=1#h')).toBe('/dashboard/trips?x=1#h');
+  });
+});
+
+describe('password length (bcrypt 72 bytes)', () => {
+  const base = { name: 'A', email: 'a@example.com' };
+  it('rejects >72 bytes in signup and login', () => {
+    const long = 'a'.repeat(73);
+    expect(signUpSchema.safeParse({ ...base, password: long }).error?.issues[0].message).toBe(
+      'Password must be 72 bytes or fewer',
+    );
+    expect(loginSchema.safeParse({ email: base.email, password: long }).success).toBe(false);
+  });
+  it('counts bytes, not characters', () => {
+    expect(signUpSchema.safeParse({ ...base, password: 'é'.repeat(37) }).success).toBe(false);
+    expect(signUpSchema.safeParse({ ...base, password: 'a'.repeat(72) }).success).toBe(true);
   });
 });

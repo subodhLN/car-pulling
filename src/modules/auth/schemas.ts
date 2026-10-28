@@ -22,21 +22,41 @@ const phoneField = z
     return normalized;
   });
 
+const PASSWORD_TOO_LONG = 'Password must be 72 bytes or fewer';
+// bcrypt silently ignores bytes past 72, so refuse longer passwords instead of truncating.
+const fitsBcrypt = (v: string) => new TextEncoder().encode(v).length <= 72;
+const passwordField = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .refine(fitsBcrypt, PASSWORD_TOO_LONG);
+
 export const signUpSchema = z.object({
   name: z.string().trim().min(1, 'Enter your name').max(80, 'Name is too long'),
   email: z.string().trim().toLowerCase().pipe(z.email('Enter a valid email address')),
-  password: z.string().min(8, 'Password must be at least 8 characters').max(200, 'Password is too long'),
+  password: passwordField,
   phone: phoneField,
 });
 export type SignUpInput = z.input<typeof signUpSchema>;
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email('Enter a valid email address')),
-  password: z.string().min(1, 'Enter your password'),
+  password: z
+    .string()
+    .min(1, 'Enter your password')
+    .refine(fitsBcrypt, PASSWORD_TOO_LONG),
 });
 
 /** Only same-site relative paths are allowed as a post-login destination. */
 export function safeNext(next: string | null | undefined): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/';
-  return next;
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/';
+  // Browsers strip tab/CR/LF and treat "\\" as "/", so reject control chars and backslashes outright.
+  if (/[\u0000-\u001f\u007f\\]/.test(next)) return '/';
+  try {
+    const base = 'http://local.invalid';
+    const url = new URL(next, base);
+    if (url.origin !== base) return '/';
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return '/';
+  }
 }

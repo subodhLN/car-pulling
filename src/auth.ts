@@ -5,17 +5,12 @@ import Google from 'next-auth/providers/google';
 import type { Provider } from 'next-auth/providers';
 import { authConfig } from '@/auth.config';
 import { db } from '@/lib/db';
-import { loginSchema } from '@/modules/auth/schemas';
-import { verifyCredentials } from '@/modules/auth/service';
+import { authorizeCredentials } from '@/modules/auth/authorize';
 
 const providers: Provider[] = [
   Credentials({
     credentials: { email: {}, password: {} },
-    async authorize(raw) {
-      const parsed = loginSchema.safeParse(raw);
-      if (!parsed.success) return null;
-      return verifyCredentials(parsed.data.email, parsed.data.password);
-    },
+    authorize: (raw, request) => authorizeCredentials(raw, request.headers),
   }),
 ];
 

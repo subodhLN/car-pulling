@@ -12,7 +12,6 @@ export function isProtectedPath(pathname: string): boolean {
 export const authConfig = {
   pages: { signIn: '/login' },
   session: { strategy: 'jwt' },
-  trustHost: true,
   providers: [],
   callbacks: {
     jwt({ token, user }) {
@@ -22,6 +21,8 @@ export const authConfig = {
       }
       return token;
     },
+    // NOTE: session.user.role comes from the JWT and can be stale (role/suspension changes).
+    // Authorization decisions must use requireUser(), which re-reads the fresh role from the DB.
     session({ session, token }) {
       if (token.id) session.user.id = token.id;
       session.user.role = token.role ?? 'USER';

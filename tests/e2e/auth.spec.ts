@@ -46,3 +46,18 @@ test('signup shows inline field errors', async ({ page }) => {
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByText('Enter a 10-digit Indian mobile number')).toBeVisible();
 });
+
+test.describe('login rate limit', () => {
+  // Distinct client IP so this does not exhaust the shared "unknown" bucket used by other tests.
+  test.use({ extraHTTPHeaders: { 'x-real-ip': `203.0.113.${Math.floor(Math.random() * 250) + 1}` } });
+  test('the 11th attempt shows the rate-limit copy', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByLabel('Email').fill('nobody@example.com');
+    await page.getByLabel('Password').fill('whatever123');
+    for (let i = 0; i < 11; i++) {
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page.getByRole('button', { name: 'Log in' })).toBeEnabled();
+    }
+    await expect(page.getByText('Too many attempts. Wait a minute and try again.')).toBeVisible();
+  });
+});
