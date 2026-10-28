@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CancelTripButton, RequestDecision } from '@/components/bookings/booking-actions';
 import { StatusBadge } from '@/components/bookings/status-badge';
+import { Rating } from '@/components/reviews/rating';
+import { ReviewForm } from '@/components/reviews/review-form';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ButtonLink } from '@/components/ui/button';
@@ -9,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { formatIst } from '@/lib/time';
 import { requirePageUser } from '@/modules/auth/guards';
 import { listDriverTrips, type DriverTrip } from '@/modules/bookings/service';
+import { pendingReviews, ratingsGivenBy, reviewKey, type ReviewTarget } from '@/modules/reviews/service';
 
 export const metadata: Metadata = { title: 'Your trips' };
 
@@ -25,8 +28,12 @@ function cancelConfirmText(trip: DriverTrip): string {
   return `Cancel this trip? ${refund}${pending}`;
 }
 
-function TripCard({ trip, upcoming }: { trip: DriverTrip; upcoming: boolean }) {
+type Reviews = { pending: Map<string, ReviewTarget>; given: Map<string, number> };
+
+function TripCard({ trip, upcoming, reviews }: { trip: DriverTrip; upcoming: boolean; reviews: Reviews }) {
   const manageable = upcoming && trip.status === 'PUBLISHED';
+  // One review form per passenger, on their first completed booking.
+  const reviewed = new Set<string>();
   return (
     <li>
       <Card className="space-y-4">
@@ -52,15 +59,18 @@ function TripCard({ trip, upcoming }: { trip: DriverTrip; upcoming: boolean }) {
           <ul className="divide-y divide-line border-t border-line" aria-label="Booking requests">
             {trip.bookings.map((b) => {
               const name = b.passenger.name ?? 'Passenger';
+              const key = reviewKey(trip.id, b.passengerId);
+              const showReview = b.status === 'COMPLETED' && !reviewed.has(key);
+              if (showReview) reviewed.add(key);
+              const pendingReview = showReview ? reviews.pending.get(key) : undefined;
+              const given = showReview ? reviews.given.get(key) : undefined;
               return (
                 <li key={b.id} className="flex flex-wrap items-center gap-3 py-3">
                   <Avatar name={name} image={b.passenger.image} size={40} />
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{name}</p>
                     <p className="text-sm text-muted">
-                      {b.passenger.ratingCount === 0
-                        ? 'New'
-                        : `★ ${b.passenger.ratingAvg.toFixed(1)} (${b.passenger.ratingCount})`}
+                      <Rating avg={Number(b.passenger.ratingAvg)} count={b.passenger.ratingCount} />
                       {' · '}
                       {plural(b.seats, 'seat', 'seats')}
                     </p>
@@ -75,6 +85,17 @@ function TripCard({ trip, upcoming }: { trip: DriverTrip; upcoming: boolean }) {
                   </div>
                   <StatusBadge status={b.status} />
                   {manageable && b.status === 'REQUESTED' ? <RequestDecision bookingId={b.id} passengerName={name} /> : null}
+                  {pendingReview || given !== undefined ? (
+                    <div className="basis-full">
+                      <ReviewForm
+                        key={key}
+                        target={
+                          pendingReview ?? { tripId: trip.id, subjectId: b.passengerId, subjectName: name, role: 'PASSENGER' }
+                        }
+                        given={given}
+                      />
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
@@ -87,7 +108,17 @@ function TripCard({ trip, upcoming }: { trip: DriverTrip; upcoming: boolean }) {
   );
 }
 
-function Section({ title, trips, upcoming }: { title: string; trips: DriverTrip[]; upcoming: boolean }) {
+function Section({
+  title,
+  trips,
+  upcoming,
+  reviews,
+}: {
+  title: string;
+  trips: DriverTrip[];
+  upcoming: boolean;
+  reviews: Reviews;
+}) {
   if (trips.length === 0) return null;
   const id = `${title.toLowerCase()}-trips`;
   return (
@@ -97,7 +128,7 @@ function Section({ title, trips, upcoming }: { title: string; trips: DriverTrip[
       </h2>
       <ul className="space-y-3">
         {trips.map((t) => (
-          <TripCard key={t.id} trip={t} upcoming={upcoming} />
+          <TripCard key={t.id} trip={t} upcoming={upcoming} reviews={reviews} />
         ))}
       </ul>
     </section>
@@ -106,8 +137,14 @@ function Section({ title, trips, upcoming }: { title: string; trips: DriverTrip[
 
 export default async function DriverTripsPage() {
   const user = await requirePageUser('/dashboard/trips');
-  const trips = await listDriverTrips(user.id);
-  const now = new Date().getTime();
+  const nowDate = new Date();
+  const now = nowDate.getTime();
+  const [trips, pending, given] = await Promise.all([
+    listDriverTrips(user.id),
+    pendingReviews(user.id, nowDate),
+    ratingsGivenBy(user.id),
+  ]);
+  const reviews: Reviews = { pending: new Map(pending.map((t) => [reviewKey(t.tripId, t.subjectId), t])), given };
 
   if (trips.length === 0) {
     return (
@@ -129,8 +166,8 @@ export default async function DriverTripsPage() {
           No upcoming rides. <Link href="/trips/new" className="font-semibold text-fg underline underline-offset-2">Offer a ride</Link>
         </p>
       ) : null}
-      <Section title="Upcoming" trips={upcoming} upcoming />
-      <Section title="Past" trips={past} upcoming={false} />
+      <Section title="Upcoming" trips={upcoming} upcoming reviews={reviews} />
+      <Section title="Past" trips={past} upcoming={false} reviews={reviews} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BookingFlash, CancelBookingButton } from '@/components/bookings/booking-actions';
 import { StatusBadge } from '@/components/bookings/status-badge';
+import { ReviewForm } from '@/components/reviews/review-form';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ButtonLink } from '@/components/ui/button';
@@ -11,12 +12,28 @@ import { formatIst } from '@/lib/time';
 import { requirePageUser } from '@/modules/auth/guards';
 import { isOpen, refundPreview, showsTripCancelled } from '@/modules/bookings/presentation';
 import { listPassengerBookings, type PassengerBooking } from '@/modules/bookings/service';
+import { pendingReviews, ratingsGivenBy, reviewKey, type ReviewTarget } from '@/modules/reviews/service';
 
 export const metadata: Metadata = { title: 'Your bookings' };
 
-function BookingCard({ booking, now, upcoming }: { booking: PassengerBooking; now: Date; upcoming: boolean }) {
+type Reviews = { pending: Map<string, ReviewTarget>; given: Map<string, number> };
+
+function BookingCard({
+  booking,
+  now,
+  upcoming,
+  reviews,
+}: {
+  booking: PassengerBooking;
+  now: Date;
+  upcoming: boolean;
+  reviews: Reviews;
+}) {
   const { trip } = booking;
   const driverName = trip.driver.name ?? 'Driver';
+  const key = reviewKey(trip.id, trip.driver.id);
+  const pendingReview = booking.status === 'COMPLETED' ? reviews.pending.get(key) : undefined;
+  const given = booking.status === 'COMPLETED' ? reviews.given.get(key) : undefined;
   return (
     <li>
       <Card className="space-y-3">
@@ -60,12 +77,25 @@ function BookingCard({ booking, now, upcoming }: { booking: PassengerBooking; no
             label={booking.status === 'REQUESTED' ? 'Cancel request' : 'Cancel booking'}
           />
         ) : null}
+        {pendingReview || given !== undefined ? (
+          <ReviewForm
+            key={key}
+            target={pendingReview ?? { tripId: trip.id, subjectId: trip.driver.id, subjectName: driverName, role: 'DRIVER' }}
+            given={given}
+          />
+        ) : null}
       </Card>
     </li>
   );
 }
 
-function Section(props: { title: string; bookings: PassengerBooking[]; now: Date; upcoming: boolean }) {
+function Section(props: {
+  title: string;
+  bookings: PassengerBooking[];
+  now: Date;
+  upcoming: boolean;
+  reviews: Reviews;
+}) {
   if (props.bookings.length === 0) return null;
   const id = `${props.title.toLowerCase()}-bookings`;
   return (
@@ -75,7 +105,7 @@ function Section(props: { title: string; bookings: PassengerBooking[]; now: Date
       </h2>
       <ul className="space-y-3">
         {props.bookings.map((b) => (
-          <BookingCard key={b.id} booking={b} now={props.now} upcoming={props.upcoming} />
+          <BookingCard key={b.id} booking={b} now={props.now} upcoming={props.upcoming} reviews={props.reviews} />
         ))}
       </ul>
     </section>
@@ -84,8 +114,13 @@ function Section(props: { title: string; bookings: PassengerBooking[]; now: Date
 
 export default async function PassengerBookingsPage() {
   const user = await requirePageUser('/dashboard/bookings');
-  const bookings = await listPassengerBookings(user.id);
   const now = new Date();
+  const [bookings, pending, given] = await Promise.all([
+    listPassengerBookings(user.id),
+    pendingReviews(user.id, now),
+    ratingsGivenBy(user.id),
+  ]);
+  const reviews: Reviews = { pending: new Map(pending.map((t) => [reviewKey(t.tripId, t.subjectId), t])), given };
 
   if (bookings.length === 0) {
     return (
@@ -108,8 +143,8 @@ export default async function PassengerBookingsPage() {
     <>
       <BookingFlash className="mb-6" />
       <div className="space-y-8">
-        <Section title="Upcoming" bookings={upcoming} now={now} upcoming />
-        <Section title="Past" bookings={past} now={now} upcoming={false} />
+        <Section title="Upcoming" bookings={upcoming} now={now} upcoming reviews={reviews} />
+        <Section title="Past" bookings={past} now={now} upcoming={false} reviews={reviews} />
       </div>
     </>
   );

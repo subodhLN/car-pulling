@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Rating } from '@/components/reviews/rating';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/cn';
 import { formatInr } from '@/lib/money';
@@ -44,9 +45,7 @@ export function TripRow({ trip }: { trip: TripSummary }) {
       <div className="col-span-full mt-1.5 flex min-w-0 flex-wrap items-center gap-2.5 border-t border-line pt-3 text-sm text-muted">
         <Avatar name={name} image={trip.driver.image} size={30} />
         <b className="font-semibold text-fg">{name}</b>
-        <span className="font-semibold text-fg">
-          {trip.driver.ratingCount === 0 ? 'New' : `★ ${trip.driver.ratingAvg.toFixed(1)}`}
-        </span>
+        <Rating avg={Number(trip.driver.ratingAvg)} count={trip.driver.ratingCount} className="font-semibold text-fg" />
         <span>
           · {trip.vehicle.color} {trip.vehicle.make} {trip.vehicle.model}
         </span>

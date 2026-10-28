@@ -123,3 +123,11 @@ export async function listReviewsFor(subjectId: string, limit = 10) {
 }
 
 export type ReviewListItem = Awaited<ReturnType<typeof listReviewsFor>>[number];
+
+/** The ratings `authorId` has given, keyed `tripId:subjectId`, for showing "You rated …" on the dashboards. */
+export async function ratingsGivenBy(authorId: string): Promise<Map<string, number>> {
+  const rows = await db.review.findMany({ where: { authorId }, select: { tripId: true, subjectId: true, rating: true } });
+  return new Map(rows.map((r) => [reviewKey(r.tripId, r.subjectId), r.rating]));
+}
+
+export const reviewKey = (tripId: string, subjectId: string) => `${tripId}:${subjectId}`;
