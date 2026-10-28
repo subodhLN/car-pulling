@@ -53,7 +53,11 @@ function BookingCard({
         <div className="flex items-center gap-3">
           <Avatar name={driverName} image={trip.driver.image} size={40} />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">{driverName}</p>
+            <p className="font-semibold">
+              <Link href={`/users/${trip.driver.id}`} className="hover:underline">
+                {driverName}
+              </Link>
+            </p>
             <p className="text-sm text-muted">
               {booking.seats} {booking.seats === 1 ? 'seat' : 'seats'} · {formatInr(booking.amount)}
             </p>

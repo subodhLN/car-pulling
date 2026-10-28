@@ -1,6 +1,6 @@
 # RideShare
 
-RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern India. Drivers publish a trip with seats and a price; passengers search by route and date, request seats, and the driver accepts or rejects. Phone numbers are shared only once a booking is accepted. Built with Next.js, Prisma and Postgres/PostGIS. Milestones M1 (core booking loop) and M2 (maps) are done; reviews, messaging, payments and admin follow.
+RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern India. Drivers publish a trip with seats and a price; passengers search by route and date, request seats, and the driver accepts or rejects. Phone numbers are shared only once a booking is accepted. Built with Next.js, Prisma and Postgres/PostGIS. Milestones M1 (core booking loop), M2 (maps) and M3 (reviews and profiles) are done; messaging, payments and admin follow.
 
 | Home (desktop, light) | Home (mobile, dark) |
 | --- | --- |
@@ -31,6 +31,14 @@ RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern I
 - Driving routes (OSRM) stored on every trip: road distance, duration and arrival time
 - Token-styled MapLibre maps (OpenFreeMap tiles) in light and dark: route preview when publishing, a map on every trip page, and a search map that follows the ride you hover or focus
 - Geo results cached in Postgres, searches rate-limited, and everything degrades to a straight line or the city list if a service is down
+
+## M3 features (trust)
+
+- After a completed ride, passenger and driver can rate each other (1–5 stars and an optional comment) from their dashboards, once per trip, for 14 days after arrival
+- Ratings are recomputed from the reviews in the same transaction as each new review, so averages never drift
+- Public profiles at `/users/<id>`: photo, member since, email and ID verification badges, rating, completed rides as driver and passenger, bio and recent reviews. Email and phone are never shown
+- Edit your name, bio and phone under **Dashboard → Profile**; names across the app link to profiles
+- The seed adds realistic reviews, so demo profiles have ratings out of the box
 
 ## Architecture
 

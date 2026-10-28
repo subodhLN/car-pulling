@@ -68,7 +68,11 @@ function TripCard({ trip, upcoming, reviews }: { trip: DriverTrip; upcoming: boo
                 <li key={b.id} className="flex flex-wrap items-center gap-3 py-3">
                   <Avatar name={name} image={b.passenger.image} size={40} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{name}</p>
+                    <p className="font-semibold">
+                      <Link href={`/users/${b.passengerId}`} className="hover:underline">
+                        {name}
+                      </Link>
+                    </p>
                     <p className="text-sm text-muted">
                       <Rating avg={Number(b.passenger.ratingAvg)} count={b.passenger.ratingCount} />
                       {' · '}

@@ -86,3 +86,5 @@ After the first deploy and seed, on the live URL:
 - [ ] Place search finds a place that is not one of the ten cities (e.g. "Hawa Mahal"); "Choose on map…" drops a pin and names it
 - [ ] The trip page shows the road route on a styled map, in light and dark themes
 - [ ] On search results, hovering a ride switches the map to its route
+- [ ] As `passenger@demo.test`, rate a completed ride from `/dashboard/bookings`: "Thanks — your review is posted"
+- [ ] Open a driver's profile from the trip page ("View profile"): rating, badges and reviews show, and no email or phone
