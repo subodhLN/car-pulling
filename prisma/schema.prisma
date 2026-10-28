@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum TripStatus {
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  ABANDONED
+  CANCELLED
+  COMPLETED
+}
+
+enum CancelledBy {
+  PASSENGER
+  DRIVER
+  ADMIN
+}
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  image         String?
+  phone         String?
+  bio           String?
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+  idVerified    Boolean    @default(false)
+  ratingAvg     Decimal    @default(0) @db.Decimal(3, 2)
+  ratingCount   Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  vehicles Vehicle[]
+  trips    Trip[]    @relation("DriverTrips")
+  bookings Booking[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Vehicle {
+  id        String   @id @default(cuid())
+  ownerId   String
+  make      String
+  model     String
+  color     String
+  seats     Int
+  createdAt DateTime @default(now())
+
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  trips Trip[]
+
+  @@index([ownerId])
+}
+
+model Trip {
+  id             String                               @id @default(cuid())
+  driverId       String
+  vehicleId      String
+  originLabel    String
+  originPoint    Unsupported("geography(Point,4326)")
+  destLabel      String
+  destPoint      Unsupported("geography(Point,4326)")
+  routePolyline  String?
+  distanceKm     Float?
+  durationMin    Int?
+  departureAt    DateTime
+  seatsTotal     Int
+  seatsAvailable Int
+  pricePerSeat   Int
+  status         TripStatus                           @default(PUBLISHED)
+  notes          String?
+  createdAt      DateTime                             @default(now())
+
+  driver   User      @relation("DriverTrips", fields: [driverId], references: [id])
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  bookings Booking[]
+
+  @@index([driverId])
+}
+
+model Booking {
+  id                    String        @id @default(cuid())
+  tripId                String
+  passengerId           String
+  seats                 Int
+  amount                Int
+  status                BookingStatus
+  stripePaymentIntentId String?
+  expiresAt             DateTime?
+  refundAmount          Int           @default(0)
+  cancelledBy           CancelledBy?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  trip      Trip @relation(fields: [tripId], references: [id])
+  passenger User @relation(fields: [passengerId], references: [id])
+
+  @@index([tripId])
+  @@index([passengerId])
+}
+
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
