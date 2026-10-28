@@ -28,6 +28,8 @@ export async function createVehicle(
 export type CreateTripInput = {
   driverId?: string;
   vehicleId?: string;
+  originLabel?: string;
+  destLabel?: string;
   origin?: LatLng;
   dest?: LatLng;
   departureAt?: Date;
@@ -58,9 +60,9 @@ export async function createTrip(over: CreateTripInput = {}): Promise<Trip> {
   await db.$executeRaw`
     INSERT INTO "Trip" ("id","driverId","vehicleId","originLabel","originPoint","destLabel","destPoint",
       "departureAt","seatsTotal","seatsAvailable","pricePerSeat","status")
-    VALUES (${id}, ${driverId}, ${vehicleId}, 'Delhi',
+    VALUES (${id}, ${driverId}, ${vehicleId}, ${over.originLabel ?? 'Delhi'},
       ST_SetSRID(ST_MakePoint(${origin.lng}, ${origin.lat}),4326)::geography,
-      'Jaipur',
+      ${over.destLabel ?? 'Jaipur'},
       ST_SetSRID(ST_MakePoint(${dest.lng}, ${dest.lat}),4326)::geography,
       ${departureAt}, ${seatsTotal}, ${seatsAvailable}, ${pricePerSeat}, ${status}::"TripStatus")`;
 

@@ -141,6 +141,7 @@ model Trip {
   bookings Booking[]
 
   @@index([driverId])
+  @@index([status, departureAt], map: "trip_status_departure_idx")
 }
 
 model Booking {

@@ -26,14 +26,14 @@ describe('schema', () => {
     const t = await createTrip();
     await expect(
       db.$executeRaw`UPDATE "Trip" SET "seatsAvailable" = -1 WHERE id = ${t.id}`,
-    ).rejects.toThrow();
+    ).rejects.toThrow(/trip_seats_chk/);
   });
 
   it('rejects seatsAvailable above seatsTotal', async () => {
     const t = await createTrip();
     await expect(
       db.$executeRaw`UPDATE "Trip" SET "seatsAvailable" = 99 WHERE id = ${t.id}`,
-    ).rejects.toThrow();
+    ).rejects.toThrow(/trip_seats_chk/);
   });
 
   it('allows only one active booking per passenger per trip', async () => {
@@ -42,8 +42,12 @@ describe('schema', () => {
     const base = { tripId: trip.id, passengerId: passenger.id, seats: 1, amount: 45000 };
 
     await db.booking.create({ data: { ...base, status: 'REQUESTED' } });
-    await expect(db.booking.create({ data: { ...base, status: 'REQUESTED' } })).rejects.toThrow();
-    await expect(db.booking.create({ data: { ...base, status: 'ACCEPTED' } })).rejects.toThrow();
+    await expect(db.booking.create({ data: { ...base, status: 'REQUESTED' } })).rejects.toThrow(
+      /Unique constraint failed on the fields: \(`tripId`,`passengerId`\)/,
+    );
+    await expect(db.booking.create({ data: { ...base, status: 'ACCEPTED' } })).rejects.toThrow(
+      /Unique constraint failed on the fields: \(`tripId`,`passengerId`\)/,
+    );
   });
 
   it('allows a new active booking after a cancelled one', async () => {
