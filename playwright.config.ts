@@ -19,5 +19,7 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Deterministic, offline geo and no external map tiles.
+    env: { ...process.env, GEO_PROVIDER: 'fake', NEXT_PUBLIC_MAP_TILES: 'off' } as Record<string, string>,
   },
 });

@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { fieldClasses } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
-import type { Place } from '@/modules/geo/cities';
+import type { Place, PlaceSuggestion } from '@/modules/geo/types';
 import { searchPlacesAction } from '@/modules/geo/actions';
 
 type Props = {
@@ -18,14 +18,37 @@ type Props = {
   defaultPlace?: Place | null;
   /** Replaces the default field styling of the text input (e.g. the borderless cells of the home search bar). */
   inputClassName?: string;
+  /** Appends a final "Choose on map…" option that calls `onMapPick`. */
+  allowMapPick?: boolean;
+  onMapPick?: () => void;
 };
 
+const DEBOUNCE_MS = 250;
+const MIN_QUERY = 2;
+const HINTS = {
+  limited: 'Showing popular places',
+  error: 'Search is unavailable — try a city name',
+} as const;
+
 /** Accessible combobox (ARIA 1.2 list autocomplete) that submits the chosen place as hidden inputs. */
-export function CityPicker({ name, id, placeholder, invalid, describedBy, onChange, defaultPlace = null, inputClassName }: Props) {
+export function CityPicker({
+  name,
+  id,
+  placeholder,
+  invalid,
+  describedBy,
+  onChange,
+  defaultPlace = null,
+  inputClassName,
+  allowMapPick = false,
+  onMapPick,
+}: Props) {
   const listId = useId();
   const [text, setText] = useState(defaultPlace?.label ?? '');
   const [chosen, setChosen] = useState<Place | null>(defaultPlace);
-  const [options, setOptions] = useState<Place[]>([]);
+  const [options, setOptions] = useState<PlaceSuggestion[]>([]);
+  const [hint, setHint] = useState<keyof typeof HINTS | null>(null);
+  const [searched, setSearched] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
@@ -39,30 +62,57 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
   );
 
   const optionId = (i: number) => `${listId}-opt-${i}`;
-  const expanded = open && options.length > 0;
+  const mapPick = allowMapPick && searched;
+  const count = options.length + (mapPick ? 1 : 0);
+  const expanded = open && (count > 0 || hint !== null);
 
   function search(q: string) {
     if (timer.current) clearTimeout(timer.current);
     const mine = ++seq.current;
-    if (!q.trim()) {
+    if (q.trim().length < MIN_QUERY) {
       setOptions([]);
+      setHint(null);
+      setSearched(false);
       setOpen(false);
       return;
     }
     timer.current = setTimeout(async () => {
-      const res = await searchPlacesAction({ q });
+      let places: PlaceSuggestion[] = [];
+      let nextHint: keyof typeof HINTS | null = null;
+      try {
+        const res = await searchPlacesAction({ q });
+        if (res.ok) {
+          places = res.data.places;
+          if (res.data.limited) nextHint = 'limited';
+        } else nextHint = 'error';
+      } catch {
+        nextHint = 'error';
+      }
       if (mine !== seq.current) return; // a newer keystroke superseded this lookup
-      const places = res.ok ? res.data : [];
       setOptions(places);
+      setHint(nextHint);
+      setSearched(true);
       setActive(-1);
-      setOpen(places.length > 0);
-    }, 150);
+      setOpen(true);
+    }, DEBOUNCE_MS);
+  }
+
+  function pickOnMap() {
+    seq.current++;
+    setOpen(false);
+    setActive(-1);
+    onMapPick?.();
+  }
+
+  function chooseAt(i: number) {
+    if (i === options.length) pickOnMap();
+    else choose(options[i]);
   }
 
   function choose(place: Place) {
     seq.current++;
     if (timer.current) clearTimeout(timer.current);
-    setChosen(place);
+    setChosen({ label: place.label, lat: place.lat, lng: place.lng });
     setText(place.label);
     setOpen(false);
     setActive(-1);
@@ -71,19 +121,19 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (options.length === 0) return;
+      if (count === 0) return;
       e.preventDefault();
       if (!open) {
         setOpen(true);
-        setActive(e.key === 'ArrowDown' ? 0 : options.length - 1);
+        setActive(e.key === 'ArrowDown' ? 0 : count - 1);
         return;
       }
       const step = e.key === 'ArrowDown' ? 1 : -1;
-      setActive((a) => (a + step + options.length) % options.length);
+      setActive((a) => (a + step + count) % count);
     } else if (e.key === 'Enter') {
       if (expanded && active >= 0) {
         e.preventDefault(); // choose the option instead of submitting the form
-        choose(options[active]);
+        chooseAt(active);
       }
     } else if (e.key === 'Escape') {
       if (open) {
@@ -120,7 +170,7 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
         }}
         onKeyDown={onKeyDown}
         onBlur={() => setOpen(false)}
-        onFocus={() => options.length > 0 && !chosen && setOpen(true)}
+        onFocus={() => count > 0 && !chosen && setOpen(true)}
       />
       <input type="hidden" name={`${name}Label`} value={chosen?.label ?? ''} />
       <input type="hidden" name={`${name}Lat`} value={chosen?.lat ?? ''} />
@@ -134,7 +184,7 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
       >
         {options.map((o, i) => (
           <li
-            key={o.label}
+            key={`${o.label}-${o.lat}-${o.lng}`}
             id={optionId(i)}
             role="option"
             aria-selected={i === active}
@@ -146,12 +196,36 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
             onMouseEnter={() => setActive(i)}
             className={cn('cursor-pointer rounded-[10px] px-3 py-2 text-[15px]', i === active && 'bg-soft')}
           >
-            {o.label}
+            <span className="block">{o.label}</span>
+            {o.detail && <span className="block text-[13px] text-muted">{o.detail}</span>}
           </li>
         ))}
+        {mapPick && (
+          <li
+            id={optionId(options.length)}
+            role="option"
+            aria-selected={active === options.length}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              pickOnMap();
+            }}
+            onMouseEnter={() => setActive(options.length)}
+            className={cn(
+              'cursor-pointer rounded-[10px] px-3 py-2 text-[15px] font-semibold text-brand',
+              active === options.length && 'bg-soft',
+            )}
+          >
+            Choose on map…
+          </li>
+        )}
+        {hint && (
+          <li role="presentation" className="px-3 py-2 text-[13px] text-muted">
+            {HINTS[hint]}
+          </li>
+        )}
       </ul>
       <p className="sr-only" aria-live="polite">
-        {expanded ? `${options.length} ${options.length === 1 ? 'suggestion' : 'suggestions'} available` : ''}
+        {expanded ? `${count} ${count === 1 ? 'suggestion' : 'suggestions'} available` : ''}
       </p>
     </div>
   );

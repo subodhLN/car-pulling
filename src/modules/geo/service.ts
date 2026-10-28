@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/rate-limit';
 import { inIndia } from './bounds';
 import { cached } from './cache';
 import { searchCityList } from './cities';
@@ -61,4 +62,33 @@ export async function route(a: LatLng, b: LatLng): Promise<RouteInfo | null> {
     logger.warn({ err: e }, 'routing failed; trip will show a straight line');
     return null;
   }
+}
+
+/** Spec §10.2: geo autocomplete 30/min per user (per IP when signed out). Reverse shares the bucket. */
+export const GEO_RATE_LIMIT = { limit: 30, windowSec: 60 } as const;
+
+export function geoRateKey(who: { userId: string | null; ip: string }): string {
+  return who.userId ? `geo:${who.userId}` : `geo:ip:${who.ip}`;
+}
+
+const allowed = (key: string) => rateLimit(key, GEO_RATE_LIMIT.limit, GEO_RATE_LIMIT.windowSec);
+
+/** Over the limit, users still get matches from the built-in city list instead of an error. */
+export async function limitedPlaceSearch(
+  q: string,
+  key: string,
+): Promise<{ places: PlaceSuggestion[]; limited: boolean }> {
+  if (q.trim().length < MIN_QUERY) return { places: [], limited: false };
+  if (!(await allowed(key))) {
+    return { places: searchCityList(q).map((p) => ({ ...p, detail: null })), limited: true };
+  }
+  return { places: await searchPlaces(q), limited: false };
+}
+
+export async function limitedReverse(
+  p: LatLng,
+  key: string,
+): Promise<{ place: PlaceSuggestion | null; limited: boolean }> {
+  if (!(await allowed(key))) return { place: null, limited: true };
+  return { place: await reversePlace(p), limited: false };
 }
