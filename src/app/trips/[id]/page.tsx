@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { BookingFlash } from '@/components/bookings/booking-actions';
+import { RouteMap } from '@/components/map/route-map';
 import { TripActions } from '@/components/trips/trip-actions';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatInr } from '@/lib/money';
 import { formatIst } from '@/lib/time';
+import { routeSummary } from '@/modules/trips/route-summary';
 import { getTrip } from '@/modules/trips/service';
 
 type Props = { params: Promise<{ id: string }> };
@@ -38,6 +40,18 @@ export default async function TripPage({ params }: Props) {
         ) : null}
       </header>
 
+      <div className="relative">
+        <RouteMap
+          className="h-[260px] sm:h-[360px]"
+          origin={trip.origin}
+          dest={trip.dest}
+          polyline={trip.routePolyline}
+        />
+        <p className="pointer-events-none absolute right-4 bottom-4 left-4 max-w-sm rounded-[16px] bg-surface px-4 py-3 text-sm shadow-float">
+          {routeSummary({ originLabel: trip.origin.label, durationMin: trip.durationMin, distanceKm: trip.distanceKm })}
+        </p>
+      </div>
+
       <Card>
         <ol className="relative space-y-6 border-l-2 border-brand pl-6">
           <li className="relative">
@@ -51,7 +65,6 @@ export default async function TripPage({ params }: Props) {
             <p>{trip.dest.label}</p>
           </li>
         </ol>
-        <p className="mt-5 text-sm text-muted">≈ {trip.distanceKm} km</p>
       </Card>
 
       <div className="grid gap-6 sm:grid-cols-2">

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SearchFilters } from '@/components/trips/search-filters';
 import { SearchForm } from '@/components/trips/search-form';
-import { TripRow } from '@/components/trips/trip-row';
+import { SearchResults } from '@/components/trips/search-results';
 import { Card } from '@/components/ui/card';
 import { buttonClasses } from '@/components/ui/button';
 import { addDaysIso, formatIst, istDayRange } from '@/lib/time';
@@ -65,39 +65,35 @@ export default async function SearchPage({ searchParams }: Props) {
           sort,
         }}
       />
-      <div className="grid gap-6 min-[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <section aria-labelledby="results-heading" className="space-y-4">
-          <div>
-            <h1 id="results-heading" className="text-2xl font-extrabold tracking-tight">
-              {fromLabel} to {toLabel}, {weekday}
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              {total} {total === 1 ? 'ride' : 'rides'} · sorted by {SORT_LABEL[sort]}
-            </p>
-          </div>
-          <SearchFilters sort={sort} radius={radius} />
-
-          {items.length === 0 ? (
-            <Card className="space-y-4">
-              <p className="font-semibold">No rides on this day yet — try the next day or widen the area</p>
-              <Link
-                href={pageHref(params, { date: addDaysIso(query.date, 1), page: '1' })}
-                className={buttonClasses({ variant: 'ghost' })}
-              >
-                Try next day
-              </Link>
-            </Card>
-          ) : (
-            <ul className="grid gap-3">
-              {items.map((t) => (
-                <li key={t.id}>
-                  <TripRow trip={t} />
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {page > 1 || hasMore ? (
+      <SearchResults
+        items={items}
+        searched={{ from: place(fromLabel, query.from), to: place(toLabel, query.to) }}
+        header={
+          <>
+            <div>
+              <h1 id="results-heading" className="text-2xl font-extrabold tracking-tight">
+                {fromLabel} to {toLabel}, {weekday}
+              </h1>
+              <p className="mt-1 text-sm text-muted">
+                {total} {total === 1 ? 'ride' : 'rides'} · sorted by {SORT_LABEL[sort]}
+              </p>
+            </div>
+            <SearchFilters sort={sort} radius={radius} />
+          </>
+        }
+        empty={
+          <Card className="space-y-4">
+            <p className="font-semibold">No rides on this day yet — try the next day or widen the area</p>
+            <Link
+              href={pageHref(params, { date: addDaysIso(query.date, 1), page: '1' })}
+              className={buttonClasses({ variant: 'ghost' })}
+            >
+              Try next day
+            </Link>
+          </Card>
+        }
+        footer={
+          page > 1 || hasMore ? (
             <nav aria-label="Pagination" className="flex justify-between">
               {page > 1 ? (
                 <Link href={pageHref(params, { page: String(page - 1) })} className={buttonClasses({ variant: 'ghost' })}>
@@ -112,15 +108,9 @@ export default async function SearchPage({ searchParams }: Props) {
                 </Link>
               ) : null}
             </nav>
-          ) : null}
-        </section>
-
-        <aside className="hidden min-[960px]:block">
-          <div className="grid min-h-[420px] place-items-center rounded-[22px] border border-line bg-soft p-6 text-center text-muted">
-            Map arrives in the next update
-          </div>
-        </aside>
-      </div>
+          ) : null
+        }
+      />
     </div>
   );
 }

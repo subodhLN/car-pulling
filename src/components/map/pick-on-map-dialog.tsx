@@ -102,7 +102,7 @@ export function PickOnMapDialog({ open, initial = null, onPick, onClose }: Props
         <p className="text-sm text-muted">Tap the map to drop a pin</p>
       </div>
       <div className="relative h-[min(60vh,420px)] bg-[var(--map-land)]">
-        <div ref={mapEl} className="absolute inset-0" />
+        <div ref={mapEl} className="h-full w-full" />
       </div>
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <p className="min-w-0 flex-1 text-[15px]" aria-live="polite">

@@ -17,8 +17,15 @@ class FakeMap {
   constructor(public opts: Record<string, unknown>) {
     FakeMap.last = this;
   }
+  listeners: Record<string, Handler[]> = {};
   once(ev: string, h: Handler) {
     (this.handlers[ev] ??= []).push(h);
+  }
+  on(ev: string, h: Handler) {
+    (this.listeners[ev] ??= []).push(h);
+  }
+  fire(ev: string) {
+    (this.listeners[ev] ?? []).forEach((h) => h());
   }
   emit(ev: string) {
     const hs = this.handlers[ev] ?? [];
@@ -112,6 +119,20 @@ describe('RouteMapInner', () => {
     render(<RouteMapInner origin={DELHI} dest={JAIPUR} polyline={poly} />);
     act(() => FakeMap.last.emit('style.load'));
     expect(FakeMap.last.fitBounds).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ animate: false }));
+  });
+
+  it('refits the route when the map is resized, leaving room for the summary card', () => {
+    render(<RouteMapInner origin={DELHI} dest={JAIPUR} polyline={poly} />);
+    act(() => FakeMap.last.emit('style.load'));
+    FakeMap.last.fitBounds.mockClear();
+    act(() => FakeMap.last.fire('resize'));
+    expect(FakeMap.last.fitBounds).toHaveBeenCalledWith(
+      [
+        [75.7873, 26.9124],
+        [77.209, 28.6139],
+      ],
+      expect.objectContaining({ padding: { top: 48, right: 48, bottom: 96, left: 48 }, animate: false }),
+    );
   });
 
   it('re-styles on theme change and keeps the route', async () => {

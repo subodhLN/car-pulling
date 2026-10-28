@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { AppError } from '@/lib/errors';
 import { istDayRange } from '@/lib/time';
+import type { LatLng } from '@/modules/geo/types';
 import { searchQuerySchema, type SearchQuery } from './search-params';
 
 export type { SearchQuery } from './search-params';
@@ -17,6 +18,10 @@ export type TripSummary = {
   pickupKm: number;
   driver: { id: string; name: string | null; image: string | null; ratingAvg: number; ratingCount: number };
   vehicle: { make: string; model: string; color: string };
+  origin: LatLng;
+  dest: LatLng;
+  /** Stored polyline6 route, or null (the map draws a straight line). */
+  routePolyline: string | null;
 };
 
 export const PAGE_SIZE = 20;
@@ -68,6 +73,11 @@ type Row = {
   make: string;
   model: string;
   color: string;
+  oLat: number;
+  oLng: number;
+  dLat: number;
+  dLng: number;
+  routePolyline: string | null;
 };
 
 export async function searchTrips(
@@ -82,7 +92,9 @@ export async function searchTrips(
       ST_Distance(t."originPoint", ST_SetSRID(ST_MakePoint(${q.from.lng}, ${q.from.lat}), 4326)::geography) / 1000.0
         AS "pickupKm",
       u."id" AS "driverId", u."name" AS "driverName", u."image" AS "driverImage",
-      u."ratingAvg", u."ratingCount", v."make", v."model", v."color"
+      u."ratingAvg", u."ratingCount", v."make", v."model", v."color",
+      ST_Y(t."originPoint"::geometry) AS "oLat", ST_X(t."originPoint"::geometry) AS "oLng",
+      ST_Y(t."destPoint"::geometry) AS "dLat", ST_X(t."destPoint"::geometry) AS "dLng", t."routePolyline"
     FROM "Trip" t
     JOIN "User" u ON u."id" = t."driverId"
     JOIN "Vehicle" v ON v."id" = t."vehicleId"
@@ -108,6 +120,9 @@ export async function searchTrips(
         ratingCount: r.ratingCount,
       },
       vehicle: { make: r.make, model: r.model, color: r.color },
+      origin: { lat: r.oLat, lng: r.oLng },
+      dest: { lat: r.dLat, lng: r.dLng },
+      routePolyline: r.routePolyline,
     }),
   );
   return { items, page: q.page, hasMore: rows.length > PAGE_SIZE };

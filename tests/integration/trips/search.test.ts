@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { db } from '@/lib/db';
 import { AppError } from '@/lib/errors';
 import type { LatLng } from '@/modules/geo/cities';
 import { countTrips, searchTrips, type SearchQuery } from '@/modules/trips/search';
@@ -152,5 +153,15 @@ describe('searchTrips', () => {
       code: 'VALIDATION',
     });
     await expect(searchTrips(q(over as Partial<SearchQuery>), now)).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('returns both points and the stored route for the map', async () => {
+    const t = await createTrip({ origin: GURUGRAM, originLabel: 'Gurugram', departureAt: day2 });
+    await db.trip.update({ where: { id: t.id }, data: { routePolyline: 'abc' } });
+    const [item] = (await searchTrips(q({ radiusKm: 30 }), now)).items;
+    expect(item.origin.lat).toBeCloseTo(GURUGRAM.lat, 6);
+    expect(item.origin.lng).toBeCloseTo(GURUGRAM.lng, 6);
+    expect(item.dest.lat).toBeCloseTo(JAIPUR.lat, 6);
+    expect(item.routePolyline).toBe('abc');
   });
 });

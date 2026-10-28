@@ -7,8 +7,6 @@ import { drawRoute, routeData, FIT_PADDING, type MapLike } from './route-layers'
 import { useResolvedTheme } from './use-theme';
 import type { RouteMapProps } from './route-map';
 
-const ATTRIBUTION = '© <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
-
 const tilesOn = () => process.env.NEXT_PUBLIC_MAP_TILES !== 'off';
 const media = (q: string) => typeof window.matchMedia === 'function' && window.matchMedia(q).matches;
 
@@ -19,6 +17,7 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
   const map = useRef<maplibregl.Map | null>(null);
   const shownTheme = useRef<MapTheme | null>(null);
   const cancelDraw = useRef<() => void>(() => {});
+  const latest = useRef<{ bounds: [[number, number], [number, number]] } | null>(null);
   const theme = useResolvedTheme();
   const [state, setState] = useState<State>('pending');
   const data = useMemo(
@@ -38,7 +37,16 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
       dragRotate: false,
     });
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    m.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: ATTRIBUTION }), 'bottom-right');
+    // Credits come from the tile source (OpenFreeMap / OpenMapTiles / OpenStreetMap).
+    m.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    // The frame can settle to its final size after the first fit; refit so the whole route stays in view.
+    m.on('resize', () => {
+      if (latest.current) m.fitBounds(latest.current.bounds, { padding: FIT_PADDING, animate: false });
+    });
+    // Start with the compact credits collapsed so they don't cover the summary card.
+    m.on('load', () =>
+      el.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show'),
+    );
     map.current = m;
     shownTheme.current = theme;
     return () => {
@@ -51,6 +59,7 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
   useEffect(() => {
     const m = map.current;
     if (!m) return;
+    latest.current = data;
     const draw = () => {
       cancelDraw.current();
       cancelDraw.current = drawRoute(m as unknown as MapLike, data, theme, !media('(prefers-reduced-motion: reduce)'));
@@ -67,5 +76,5 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
     }
   }, [data, theme]);
 
-  return <div ref={el} data-testid="route-map" data-route-state={state} className="absolute inset-0" />;
+  return <div ref={el} data-testid="route-map" data-route-state={state} className="h-full w-full" />;
 }
