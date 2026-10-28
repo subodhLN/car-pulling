@@ -63,6 +63,14 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await gotoReady(visitor, `/search?from=delhi&to=jaipur&date=${istDate(40)}`);
   await expect(visitor.getByText('No rides on this day yet — try the next day or widen the area')).toBeVisible();
   await expect(visitor.getByRole('link', { name: 'Try next day' })).toBeVisible();
+  const searchForm = visitor.getByRole('form', { name: 'Search rides' });
+  await expect(searchForm.getByLabel('Date')).toHaveValue(istDate(40));
+  // In-page navigation must reset the search form to the new query, even after the visitor edited a field
+  // without searching (the form used to keep its old state).
+  await searchForm.getByLabel('Date').fill(istDate(45));
+  await visitor.getByRole('link', { name: 'Try next day' }).click();
+  await expect(visitor).toHaveURL(new RegExp(`date=${istDate(41)}`));
+  await expect(searchForm.getByLabel('Date')).toHaveValue(istDate(41));
 
   // Missing places show the prompt.
   await visitor.goto('/search');

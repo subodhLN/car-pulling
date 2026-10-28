@@ -55,3 +55,34 @@ test.describe('login rate limit', () => {
     await expect(page.getByText('Too many attempts. Wait a minute and try again.')).toBeVisible();
   });
 });
+
+test.describe('before hydration (JavaScript disabled)', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('submitting login never puts credentials in the URL', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByLabel('Email').fill('leak@example.com');
+    await page.getByLabel('Password').fill('secret-password-1');
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST');
+    await page.getByLabel('Password').press('Enter');
+    expect((await posted).status()).toBeLessThan(500);
+    await page.waitForLoadState('load');
+    expect(page.url()).not.toContain('password=');
+    expect(page.url()).not.toContain('email=');
+    await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
+  });
+
+  test('submitting signup never puts personal data in the URL', async ({ page }) => {
+    await page.goto('/signup');
+    await page.getByLabel('Full name').fill('Leak Test');
+    await page.getByLabel('Email').fill('leak@example.com');
+    await page.getByLabel('Password').fill('secret-password-1');
+    await page.getByLabel(/Mobile number/).fill('98765 43210');
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST');
+    await page.getByLabel(/Mobile number/).press('Enter');
+    expect((await posted).status()).toBeLessThan(500);
+    await page.waitForLoadState('load');
+    for (const key of ['password=', 'email=', 'name=', 'phone=']) expect(page.url()).not.toContain(key);
+    await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+  });
+});

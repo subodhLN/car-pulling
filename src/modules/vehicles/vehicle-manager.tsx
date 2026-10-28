@@ -121,7 +121,7 @@ function AddVehicleForm() {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4">
+    <form method="post" onSubmit={onSubmit} noValidate className="space-y-4">
       {formError ? (
         <p role="alert" className="rounded-[14px] border border-danger px-4 py-3 text-sm text-danger">
           {formError}

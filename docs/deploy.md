@@ -10,17 +10,19 @@ RideShare runs on Vercel with a Neon Postgres database (PostGIS included). Nothi
 
 ## 2. Environment variables
 
-Set these in Vercel under **Settings > Environment Variables** (Production, and Preview if you use it):
+Set these in Vercel under **Settings > Environment Variables** for **Production**. Preview deploys need their own database (see the note below the table):
 
 | Variable | Value |
 | --- | --- |
 | `DATABASE_URL` | The **pooled** Neon URL (used by the running app) |
-| `DIRECT_URL` | The **unpooled** Neon URL: copy the value of `DATABASE_URL_UNPOOLED` (or `POSTGRES_URL_NON_POOLING`). Used by `prisma migrate deploy`. Set it for Production **and** Preview, **before the first deploy**: the build fails at `prisma migrate deploy` if it is missing. |
+| `DIRECT_URL` | The **unpooled** Neon URL: copy the value of `DATABASE_URL_UNPOOLED` (or `POSTGRES_URL_NON_POOLING`). Used by `prisma migrate deploy`. Set it for **Production only**, **before the first deploy**: the production build fails at `prisma migrate deploy` if it is missing. |
 | `AUTH_SECRET` | A random string: `openssl rand -base64 32` |
 | `CRON_SECRET` | A random string; the cron endpoint requires `Authorization: Bearer $CRON_SECRET` |
 | `NEXT_PUBLIC_APP_URL` | Your public URL, e.g. `https://your-app.vercel.app` |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional. Enables "Continue with Google". |
 | `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | Optional. Set to `false` to hide the demo-accounts panel on `/login` (shown by default). |
+
+**Preview deploys:** never give Preview the production `DATABASE_URL` or `DIRECT_URL`. Either enable Neon's preview-branch integration (each Preview deploy gets its own Neon branch and connection strings), or create a separate database and set its pooled URL as `DATABASE_URL` for the Preview environment (Preview does not need `DIRECT_URL`). Preview builds never run migrations (see step 3), so a separate Preview database must be migrated by hand: `DIRECT_URL='<preview direct url>' DATABASE_URL='<preview direct url>' npx prisma migrate deploy`.
 
 `AUTH_TRUST_HOST` is not needed on Vercel (it is only for local and self-hosted runs).
 
@@ -28,7 +30,7 @@ For Google sign-in, create an OAuth client in Google Cloud Console and add the a
 
 ## 3. Build command
 
-Set the Vercel **Build Command** to `npm run vercel-build` (Settings > Build and Deployment, or leave it empty: Vercel uses the `vercel-build` script when present). It runs `prisma migrate deploy && next build`, so every deploy applies pending migrations first. Prisma uses `DIRECT_URL` for migrations.
+Set the Vercel **Build Command** to `npm run vercel-build` (Settings > Build and Deployment, or leave it empty: Vercel uses the `vercel-build` script when present). It runs `scripts/vercel-build.mjs`, which always runs `prisma generate` (Vercel caches `node_modules`, so the client must be regenerated after schema changes), runs `prisma migrate deploy` **only when `VERCEL_ENV=production`** (other environments log `Skipping prisma migrate deploy on <env>`), then `next build`. Prisma uses `DIRECT_URL` for migrations.
 
 ## 4. Seed the database once
 
@@ -40,7 +42,7 @@ DATABASE_URL='<direct neon url>' DIRECT_URL='<direct neon url>' SEED_ALLOW=1 npm
 
 `SEED_ALLOW=1` is required because the target is not a local database; the seed prints the host and database name before it wipes anything. This creates the demo accounts `driver@demo.test`, `passenger@demo.test` and `admin@demo.test`, all with password `demo-ride-2026`. Do not re-run it after real users have signed up, and set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` for a real launch.
 
-The demo panel also exposes `admin@demo.test`. In M1 the ADMIN role has no extra powers (the admin panel arrives in M6), but set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` and/or delete the demo accounts before M6 ships.
+The demo panel also exposes `admin@demo.test`. In M1 the admin account has no extra powers: it cannot act on other people's bookings or trips (admin tooling arrives in M6), but set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` and/or delete the demo accounts before M6 ships.
 
 ## 5. Cron tick
 

@@ -5,7 +5,7 @@ import { SearchForm } from '@/components/trips/search-form';
 import { TripRow } from '@/components/trips/trip-row';
 import { Card } from '@/components/ui/card';
 import { buttonClasses } from '@/components/ui/button';
-import { formatIst, istDayRange } from '@/lib/time';
+import { addDaysIso, formatIst, istDayRange } from '@/lib/time';
 import type { Place } from '@/modules/geo/cities';
 import { countTrips, searchTrips } from '@/modules/trips/search';
 import { parseSearchParams } from '@/modules/trips/search-params';
@@ -15,11 +15,6 @@ export const metadata: Metadata = { title: 'Find a ride' };
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 const SORT_LABEL = { departure: 'departure', price: 'price', pickup: 'pickup distance' } as const;
-
-function nextDay(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-}
 
 function pageHref(params: Record<string, string | string[] | undefined>, overrides: Record<string, string>) {
   const out = new URLSearchParams();
@@ -53,9 +48,14 @@ export default async function SearchPage({ searchParams }: Props) {
   const place = (label: string, p: { lat: number; lng: number }): Place => ({ label, lat: p.lat, lng: p.lng });
   const weekday = formatIst(istDayRange(query.date).start, 'EEEE');
 
+  // Keyed on the query so in-page navigation (Try next day, pagination, filters, back/forward) remounts the
+  // form with the new values instead of keeping its previous state.
+  const formKey = JSON.stringify({ query, fromLabel, toLabel });
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
       <SearchForm
+        key={formKey}
         initial={{
           from: place(fromLabel, query.from),
           to: place(toLabel, query.to),
@@ -81,7 +81,7 @@ export default async function SearchPage({ searchParams }: Props) {
             <Card className="space-y-4">
               <p className="font-semibold">No rides on this day yet — try the next day or widen the area</p>
               <Link
-                href={pageHref(params, { date: nextDay(query.date), page: '1' })}
+                href={pageHref(params, { date: addDaysIso(query.date, 1), page: '1' })}
                 className={buttonClasses({ variant: 'ghost' })}
               >
                 Try next day

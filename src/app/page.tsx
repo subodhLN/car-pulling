@@ -5,7 +5,7 @@ import { RouteCard, type RouteCardProps } from '@/components/home/route-card';
 import { SearchBar } from '@/components/home/search-bar';
 import { TrustSection } from '@/components/home/trust-section';
 import { formatInr } from '@/lib/money';
-import { formatIst, istDayRange } from '@/lib/time';
+import { addDaysIso, formatIst, istDayRange } from '@/lib/time';
 import { CITIES } from '@/modules/geo/cities';
 import { MATCH_RADIUS_KM, popularRoutes, type PopularRoute } from '@/modules/trips/popular';
 import { searchHref } from '@/modules/trips/search-params';
@@ -20,15 +20,10 @@ const CURATED: [origin: string, dest: string][] = [
   ['chandigarh', 'shimla'],
 ];
 
-function addDays(date: string, days: number): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
-}
-
 /** Today if it is Saturday or Sunday in IST, otherwise the coming Saturday. */
 function weekendDate(today: string): string {
   const isoWeekday = Number(formatIst(istDayRange(today).start, 'i')); // 1 = Mon … 7 = Sun
-  return isoWeekday >= 6 ? today : addDays(today, 6 - isoWeekday);
+  return isoWeekday >= 6 ? today : addDaysIso(today, 6 - isoWeekday);
 }
 
 function formatDuration(min: number): string {

@@ -84,8 +84,10 @@ export function AuthForm({ mode, next }: { mode: Mode; next?: string }) {
 
   const nextQuery = next ? `?next=${encodeURIComponent(next)}` : '';
 
+  // method="post": if the form is submitted before hydration, the browser posts the fields in the body
+  // (Next re-renders the page) instead of a native GET that would put email/password in the URL.
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4">
+    <form method="post" onSubmit={onSubmit} noValidate className="space-y-4">
       {formError ? (
         <p role="alert" className="rounded-[14px] border border-danger px-4 py-3 text-sm text-danger">
           {formError}
