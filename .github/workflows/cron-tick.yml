@@ -1,0 +1,22 @@
+name: Cron tick
+# Vercel Hobby only allows daily crons, so the 15-minute tick (expire requests, complete trips,
+# re-cancel stuck cascades) runs from GitHub Actions. See docs/deploy.md.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/tick
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::APP_URL and/or CRON_SECRET secrets are not set; skipping the cron tick."
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/tick"

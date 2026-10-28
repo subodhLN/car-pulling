@@ -33,6 +33,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
+      DIRECT_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
       DATABASE_URL_TEST: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
     steps:
       - uses: actions/checkout@v4

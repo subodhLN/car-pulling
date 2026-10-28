@@ -17,6 +17,7 @@ export default defineConfig(() => {
   }
   // Integration tests run against the dedicated test database only.
   process.env.DATABASE_URL = testUrl;
+  process.env.DIRECT_URL = testUrl;
 
   return {
     plugins: [tsconfigPaths()],
