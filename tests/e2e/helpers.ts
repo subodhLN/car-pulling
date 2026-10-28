@@ -24,11 +24,20 @@ export async function newUserContext(browser: Browser): Promise<{ context: Brows
   return { context, page: await context.newPage() };
 }
 
+/**
+ * Navigate and wait for the network to go quiet, so React has hydrated before a form is used. Clicking a
+ * submit button earlier makes the browser submit the form natively (a GET that reloads the page).
+ */
+export async function gotoReady(page: Page, url: string): Promise<void> {
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
+}
+
 export type SignUpInput = { name: string; email: string; password: string; phone?: string };
 
 /** Create an account through the signup form; resolves once signed in on the home page. */
 export async function signUp(page: Page, { name, email, password, phone }: SignUpInput): Promise<void> {
-  await page.goto('/signup');
+  await gotoReady(page, '/signup');
   await page.getByLabel('Full name').fill(name);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
@@ -47,7 +56,7 @@ export const istDate = (daysOut: number) =>
   new Date(Date.now() + daysOut * 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 export async function publishTrip(page: Page): Promise<string> {
-  await page.goto('/dashboard/vehicles');
+  await gotoReady(page, '/dashboard/vehicles');
   await page.getByLabel('Make').fill('Maruti');
   await page.getByLabel('Model').fill('Ertiga');
   await page.getByLabel('Colour').fill('White');
@@ -55,7 +64,7 @@ export async function publishTrip(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Add car' }).click();
   await expect(page.getByText('Maruti Ertiga · White · 4 passenger seats')).toBeVisible();
 
-  await page.goto('/trips/new');
+  await gotoReady(page, '/trips/new');
   const from = page.getByRole('combobox', { name: 'From' });
   await from.pressSequentially('Delh');
   await expect(page.getByRole('option').first()).toBeVisible();

@@ -18,7 +18,10 @@ function authorized(req: Request): boolean {
   return timingSafeEqual(digest(header), digest(`Bearer ${secret}`));
 }
 
-/** Vercel Cron calls this every 15 minutes (vercel.json) with the CRON_SECRET bearer token. */
+/**
+ * Called every 15 minutes by the GitHub Actions workflow (.github/workflows/cron-tick.yml), with a daily Vercel
+ * cron (vercel.json) as backstop; both send the CRON_SECRET bearer token.
+ */
 export async function GET(req: Request): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   return NextResponse.json(await runTick());

@@ -1,4 +1,4 @@
-import { expect, newUserContext, publishTrip, signUp, test, uniqueEmail } from './helpers';
+import { expect, gotoReady, newUserContext, publishTrip, signUp, test, uniqueEmail } from './helpers';
 
 test('request → driver rejects → passenger sees Rejected → seats restored on the trip page', async ({ browser }) => {
   const passengerName = `Pax ${Date.now()}`;
@@ -10,25 +10,25 @@ test('request → driver rejects → passenger sees Rejected → seats restored 
   await expect(driver.getByText('2 seats left')).toBeVisible();
 
   await signUp(pax, { name: passengerName, email: uniqueEmail('pax'), password: 'longenough1' });
-  await pax.goto(tripPath);
+  await gotoReady(pax, tripPath);
   await pax.getByLabel('Seats').selectOption('1');
   await pax.getByRole('button', { name: 'Request seats' }).click();
   await expect(pax.getByText('Requested', { exact: true })).toBeVisible();
   await expect(pax.getByText('1 seat left')).toBeVisible();
 
   // Driver rejects from the dashboard.
-  await driver.goto('/dashboard/trips');
+  await gotoReady(driver, '/dashboard/trips');
   const card = driver.getByRole('listitem').filter({ has: driver.locator(`a[href="${tripPath}"]`) });
   await expect(card.getByText(passengerName)).toBeVisible();
   await card.getByRole('button', { name: `Reject ${passengerName}` }).click();
   await expect(card.getByText('Rejected', { exact: true })).toBeVisible();
 
   // Passenger sees Rejected, never the driver's phone, and both seats are open again.
-  await pax.goto('/dashboard/bookings');
+  await gotoReady(pax, '/dashboard/bookings');
   const booking = pax.getByRole('listitem').filter({ has: pax.locator(`a[href="${tripPath}"]`) });
   await expect(booking.getByText('Rejected', { exact: true })).toBeVisible();
-  await expect(booking.getByRole('link', { name: '+919822233344' })).toHaveCount(0);
-  await pax.goto(tripPath);
+  await expect(booking.locator('a[href^="tel:"]')).toHaveCount(0);
+  await gotoReady(pax, tripPath);
   await expect(pax.getByText('2 seats left')).toBeVisible();
 
   await driverCtx.close();

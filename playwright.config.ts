@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: 'tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
+  // The dev server compiles routes on first hit; give assertions headroom under parallel load.
+  expect: { timeout: 10_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'github' : 'list',

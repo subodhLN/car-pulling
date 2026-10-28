@@ -5,7 +5,7 @@ RideShare runs on Vercel with a Neon Postgres database (PostGIS included). Nothi
 ## 1. Create the project and database
 
 1. Push the repository to GitHub and import it in Vercel (**Add New... > Project**). Framework preset: Next.js.
-2. In the Vercel project open the **Storage** tab, choose **Neon** from the Marketplace and create a database. Vercel adds the connection strings to the project's environment variables. Check that you end up with a pooled URL (host contains `-pooler`) and a direct URL (no `-pooler`).
+2. In the Vercel project open the **Storage** tab, choose **Neon** from the Marketplace and create a database. Vercel adds the connection strings to the project's environment variables. The integration provides the pooled `DATABASE_URL` (host contains `-pooler`) and the unpooled `DATABASE_URL_UNPOOLED`. Older integrations name them `POSTGRES_PRISMA_URL` and `POSTGRES_URL_NON_POOLING`.
 3. PostGIS needs no manual step: the first migration runs `CREATE EXTENSION IF NOT EXISTS postgis`.
 
 ## 2. Environment variables
@@ -15,7 +15,7 @@ Set these in Vercel under **Settings > Environment Variables** (Production, and 
 | Variable | Value |
 | --- | --- |
 | `DATABASE_URL` | The **pooled** Neon URL (used by the running app) |
-| `DIRECT_URL` | The **direct** (non-pooled) Neon URL (used by `prisma migrate deploy`) |
+| `DIRECT_URL` | The **unpooled** Neon URL: copy the value of `DATABASE_URL_UNPOOLED` (or `POSTGRES_URL_NON_POOLING`). Used by `prisma migrate deploy`. Set it for Production **and** Preview, **before the first deploy**: the build fails at `prisma migrate deploy` if it is missing. |
 | `AUTH_SECRET` | A random string: `openssl rand -base64 32` |
 | `CRON_SECRET` | A random string; the cron endpoint requires `Authorization: Bearer $CRON_SECRET` |
 | `NEXT_PUBLIC_APP_URL` | Your public URL, e.g. `https://your-app.vercel.app` |
@@ -32,13 +32,15 @@ Set the Vercel **Build Command** to `npm run vercel-build` (Settings > Build and
 
 ## 4. Seed the database once
 
-Seeding runs from your own machine against Neon's **direct** URL. The seed wipes all data first, so run it only on a fresh database:
+Seeding runs from your own machine against Neon's unpooled URL. The seed wipes all data first, so run it only on a fresh database:
 
 ```bash
 DATABASE_URL='<direct neon url>' DIRECT_URL='<direct neon url>' SEED_ALLOW=1 npm run db:seed
 ```
 
-(`SEED_ALLOW=1` is only needed if `NODE_ENV=production` is set in your shell.) This creates the demo accounts `driver@demo.test`, `passenger@demo.test` and `admin@demo.test`, all with password `demo-ride-2026`. Do not re-run it after real users have signed up, and set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` for a real launch.
+`SEED_ALLOW=1` is required because the target is not a local database; the seed prints the host and database name before it wipes anything. This creates the demo accounts `driver@demo.test`, `passenger@demo.test` and `admin@demo.test`, all with password `demo-ride-2026`. Do not re-run it after real users have signed up, and set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` for a real launch.
+
+The demo panel also exposes `admin@demo.test`. In M1 the ADMIN role has no extra powers (the admin panel arrives in M6), but set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` and/or delete the demo accounts before M6 ships.
 
 ## 5. Cron tick
 
@@ -49,7 +51,7 @@ DATABASE_URL='<direct neon url>' DIRECT_URL='<direct neon url>' SEED_ALLOW=1 npm
   - `APP_URL`: your public URL with no trailing slash, e.g. `https://your-app.vercel.app`
   - `CRON_SECRET`: the same value as the Vercel env var
 
-  Without these secrets the workflow prints a notice and exits successfully. You can also run it by hand from the **Actions** tab (**Run workflow**). GitHub may delay scheduled runs by several minutes.
+  Without these secrets the workflow prints a notice and exits successfully. You can also run it by hand from the **Actions** tab (**Run workflow**). GitHub may delay scheduled runs by several minutes, and disables scheduled workflows after 60 days without repository activity (re-enable it from the Actions tab).
 
 ## 6. Smoke test
 

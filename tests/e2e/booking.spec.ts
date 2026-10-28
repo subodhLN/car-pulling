@@ -1,4 +1,4 @@
-import { expect, newUserContext, publishTrip, signUp, test, uniqueEmail } from './helpers';
+import { expect, gotoReady, newUserContext, publishTrip, signUp, test, uniqueEmail } from './helpers';
 
 test('request → accept → phone revealed → cancel with refund preview → seats restored', async ({ browser }) => {
   const passengerName = `Pax ${Date.now()}`;
@@ -12,7 +12,7 @@ test('request → accept → phone revealed → cancel with refund preview → s
   await expect(driver.getByRole('button', { name: 'Request seats' })).toHaveCount(0);
 
   // Signed-out visitors are sent to log in.
-  await pax.goto(tripPath);
+  await gotoReady(pax, tripPath);
   await expect(pax.getByRole('link', { name: 'Log in to book' })).toHaveAttribute(
     'href',
     `/login?next=${encodeURIComponent(tripPath)}`,
@@ -20,7 +20,7 @@ test('request → accept → phone revealed → cancel with refund preview → s
 
   // Passenger requests 1 seat.
   await signUp(pax, { name: passengerName, email: uniqueEmail('pax'), password: 'longenough1' });
-  await pax.goto(tripPath);
+  await gotoReady(pax, tripPath);
   await pax.getByLabel('Seats').selectOption('1');
   await pax.getByRole('button', { name: 'Request seats' }).click();
   await expect(pax.getByText('Requested', { exact: true })).toBeVisible();
@@ -28,7 +28,7 @@ test('request → accept → phone revealed → cancel with refund preview → s
   await expect(pax.getByText(/Driver's phone/)).toHaveCount(0);
 
   // Driver accepts on the dashboard.
-  await driver.goto('/dashboard/trips');
+  await gotoReady(driver, '/dashboard/trips');
   const card = driver.getByRole('listitem').filter({ has: driver.locator(`a[href="${tripPath}"]`) });
   await expect(card.getByText(passengerName)).toBeVisible();
   await expect(card.getByText('Requested', { exact: true })).toBeVisible();
@@ -39,7 +39,7 @@ test('request → accept → phone revealed → cancel with refund preview → s
   await pax.reload();
   await expect(pax.getByText('Accepted', { exact: true })).toBeVisible();
   await expect(pax.getByRole('link', { name: '+919811122233' })).toBeVisible();
-  await pax.goto('/dashboard/bookings');
+  await gotoReady(pax, '/dashboard/bookings');
   const booking = pax.getByRole('listitem').filter({ has: pax.locator(`a[href="${tripPath}"]`) });
   await expect(booking.getByText('Accepted', { exact: true })).toBeVisible();
   await expect(booking.getByRole('link', { name: '+919811122233' })).toBeVisible();
@@ -55,7 +55,7 @@ test('request → accept → phone revealed → cancel with refund preview → s
   await expect(booking.getByRole('link', { name: '+919811122233' })).toHaveCount(0);
 
   // Seats are back on the trip page, and the passenger can request again.
-  await pax.goto(tripPath);
+  await gotoReady(pax, tripPath);
   await expect(pax.getByText('2 seats left')).toBeVisible();
   await expect(pax.getByRole('button', { name: 'Request seats' })).toBeVisible();
 

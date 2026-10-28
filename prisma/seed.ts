@@ -3,8 +3,8 @@
  * state. Idempotent: it truncates every application table, then inserts. Deterministic structure (seeded
  * PRNG); dates are relative to "now".
  *
- *   npm run db:seed                 # refuses to run when NODE_ENV=production
- *   SEED_ALLOW=1 npm run db:seed    # explicit override (e.g. seeding Neon for a soft launch)
+ *   npm run db:seed                 # local databases only (localhost, 127.0.0.1, ::1, db)
+ *   SEED_ALLOW=1 npm run db:seed    # explicit override for a remote DB or NODE_ENV=production (e.g. Neon)
  *
  * Future trips and bookings go through the real services (publishTrip, requestBooking, transition) so the
  * rules hold. publishTrip/requestBooking refuse past or imminent departures, so past (COMPLETED) trips and
@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BookingStatus, CancelledBy } from '@prisma/client';
 import { db } from '@/lib/db';
+import { assertSafeSeedTarget } from './seed-guard';
 import { DEMO_PASSWORD } from '@/modules/auth/demo-accounts';
 import { signUp } from '@/modules/auth/service';
 import { requestBooking, transition } from '@/modules/bookings/service';
@@ -27,8 +28,11 @@ try {
   // no .env: rely on the real environment
 }
 
-if (process.env.NODE_ENV === 'production' && process.env.SEED_ALLOW !== '1') {
-  console.error('Refusing to seed: NODE_ENV=production. Set SEED_ALLOW=1 to override.');
+try {
+  const target = assertSafeSeedTarget(process.env.DATABASE_URL, process.env);
+  console.log(`Seeding (wipes all data): host=${target.host} database=${target.database}`);
+} catch (e) {
+  console.error((e as Error).message);
   process.exit(1);
 }
 

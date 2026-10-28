@@ -1,4 +1,4 @@
-import { expect, newUserContext, signUp, test, uniqueEmail } from './helpers';
+import { expect, gotoReady, newUserContext, signUp, test, uniqueEmail } from './helpers';
 
 const istDate = (daysOut: number) =>
   new Date(Date.now() + daysOut * 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -13,7 +13,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   // A driver signs up, adds a car and publishes Delhi → Jaipur a few days out.
   await signUp(page, { name: driverName, email: uniqueEmail('search'), password: 'longenough1' });
 
-  await page.goto('/dashboard/vehicles');
+  await gotoReady(page, '/dashboard/vehicles');
   await page.getByLabel('Make').fill('Maruti');
   await page.getByLabel('Model').fill('Ertiga');
   await page.getByLabel('Colour').fill('White');
@@ -21,7 +21,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await page.getByRole('button', { name: 'Add car' }).click();
   await expect(page.getByText('Maruti Ertiga · White · 4 passenger seats')).toBeVisible();
 
-  await page.goto('/trips/new');
+  await gotoReady(page, '/trips/new');
   const from = page.getByRole('combobox', { name: 'From' });
   await from.pressSequentially('Delh');
   await expect(page.getByRole('option').first()).toBeVisible();
@@ -42,7 +42,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
 
   // A fresh visitor (no session) searches.
   const { context: ctx, page: visitor } = await newUserContext(browser);
-  await visitor.goto(`/search?from=delhi&to=jaipur&date=${date}`);
+  await gotoReady(visitor, `/search?from=delhi&to=jaipur&date=${date}`);
   await expect(visitor.getByRole('heading', { level: 1 })).toContainText('Delhi to Jaipur,');
   await expect(visitor.getByText('rides · sorted by departure').or(visitor.getByText('ride · sorted by departure'))).toBeVisible();
   const row = visitor.getByRole('link', { name: new RegExp(driverName) });
@@ -60,7 +60,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await expect(visitor.getByRole('link', { name: new RegExp(driverName) })).toBeVisible();
 
   // A day with no rides shows the empty state.
-  await visitor.goto(`/search?from=delhi&to=jaipur&date=${istDate(40)}`);
+  await gotoReady(visitor, `/search?from=delhi&to=jaipur&date=${istDate(40)}`);
   await expect(visitor.getByText('No rides on this day yet — try the next day or widen the area')).toBeVisible();
   await expect(visitor.getByRole('link', { name: 'Try next day' })).toBeVisible();
 

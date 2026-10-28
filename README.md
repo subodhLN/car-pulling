@@ -76,7 +76,9 @@ npm run db:seed                # ~30 users, ~80 trips, bookings in every state
 npm run dev                    # http://localhost:3000
 ```
 
-Log in with a demo account from the panel on `/login`: `driver@demo.test`, `passenger@demo.test` or `admin@demo.test`, password `demo-ride-2026`. `npm run db:seed` wipes the database before inserting, so re-running it is safe; it refuses to run with `NODE_ENV=production` unless `SEED_ALLOW=1`.
+`DIRECT_URL` (the non-pooled DB URL; same as `DATABASE_URL` locally) is required: if you already have a `.env`, copy that line from `.env.example`.
+
+Log in with a demo account from the panel on `/login`: `driver@demo.test`, `passenger@demo.test` or `admin@demo.test`, password `demo-ride-2026`. `npm run db:seed` wipes the database before inserting, so re-running it is safe; it only targets local databases (localhost, 127.0.0.1, ::1, `db`) and refuses anything else, or `NODE_ENV=production`, unless `SEED_ALLOW=1`. E2E seeding never honours `SEED_ALLOW`.
 
 ## Tests
 
