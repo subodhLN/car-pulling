@@ -14,13 +14,15 @@ type Props = {
   invalid?: boolean;
   describedBy?: string;
   onChange?: (place: Place | null) => void;
+  /** Prefill (e.g. from URL params); the place is submitted without the user typing. */
+  defaultPlace?: Place | null;
 };
 
 /** Accessible combobox (ARIA 1.2 list autocomplete) that submits the chosen place as hidden inputs. */
-export function CityPicker({ name, id, placeholder, invalid, describedBy, onChange }: Props) {
+export function CityPicker({ name, id, placeholder, invalid, describedBy, onChange, defaultPlace = null }: Props) {
   const listId = useId();
-  const [text, setText] = useState('');
-  const [chosen, setChosen] = useState<Place | null>(null);
+  const [text, setText] = useState(defaultPlace?.label ?? '');
+  const [chosen, setChosen] = useState<Place | null>(defaultPlace);
   const [options, setOptions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
