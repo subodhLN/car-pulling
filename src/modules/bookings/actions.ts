@@ -25,13 +25,16 @@ export const requestBookingAction = defineAction(requestBookingSchema, async ({ 
   return res;
 });
 
-async function runTransition(bookingId: string, event: BookingEvent): Promise<Result<{ status: string }>> {
+async function runTransition(
+  bookingId: string,
+  event: BookingEvent,
+): Promise<Result<{ status: string; refundAmount: number }>> {
   const user = await requireUser();
   const actor = await actorFor(bookingId, user);
   const res = await transition(bookingId, event, actor);
   if (!res.ok) return res;
   revalidateBookingPages(res.data.tripId);
-  return { ok: true, data: { status: res.data.status } };
+  return { ok: true, data: { status: res.data.status, refundAmount: res.data.refundAmount } };
 }
 
 export const acceptBookingAction = defineAction(bookingIdSchema, ({ bookingId }) => runTransition(bookingId, 'ACCEPT'));

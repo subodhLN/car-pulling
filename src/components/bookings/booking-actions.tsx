@@ -1,8 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useSyncExternalStore, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/cn';
+import { formatInr } from '@/lib/money';
 import type { Result } from '@/lib/result';
 import { acceptBookingAction, cancelBookingAction, rejectBookingAction } from '@/modules/bookings/actions';
 import { cancelTripAction } from '@/modules/trips/actions';
@@ -18,13 +20,14 @@ export function useBookingAction() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  function run<T>(action: () => Promise<Result<T>>, onDone?: () => void) {
+  function run<T>(action: () => Promise<Result<T>>, onDone?: (data?: T) => void) {
     setError(null);
     setNote(null);
+    setFlash(null);
     start(async () => {
       const res = await action();
       if (res.ok) {
-        onDone?.();
+        onDone?.(res.data);
         router.refresh();
         return;
       }
@@ -59,6 +62,37 @@ export function ActionMessages({ error, note }: { error: string | null; note: st
   return null;
 }
 
+/*
+ * Outcome message for a completed cancel. Module-level so it survives router.refresh(), which re-renders
+ * the page and unmounts the button that set it (the booking moves out of the open state). <BookingFlash />
+ * sits in a stable spot on the page and clears it when the page unmounts.
+ */
+let flash: string | null = null;
+const flashListeners = new Set<() => void>();
+function setFlash(message: string | null) {
+  flash = message;
+  for (const l of flashListeners) l();
+}
+function subscribeFlash(l: () => void) {
+  flashListeners.add(l);
+  return () => {
+    flashListeners.delete(l);
+  };
+}
+
+export function BookingFlash({ className }: { className?: string }) {
+  const message = useSyncExternalStore(subscribeFlash, () => flash, () => null);
+  useEffect(() => () => setFlash(null), []);
+  return (
+    <p
+      role="status"
+      className={message ? cn('rounded-[14px] bg-soft px-4 py-3 text-sm font-semibold', className) : 'sr-only'}
+    >
+      {message}
+    </p>
+  );
+}
+
 /** Passenger cancel with an inline confirm step; `refundNote` (computed server-side) is shown before confirming. */
 export function CancelBookingButton({
   bookingId,
@@ -82,7 +116,18 @@ export function CancelBookingButton({
           <Button
             variant="danger"
             disabled={pending}
-            onClick={() => run(() => cancelBookingAction({ bookingId }), () => setConfirming(false))}
+            onClick={() =>
+              run(
+                () => cancelBookingAction({ bookingId }),
+                (data) => {
+                  setConfirming(false);
+                  if (!data) return; // INVALID_STATE: the refreshed page shows the current state
+                  // The amount transition() actually refunded, not the render-time preview.
+                  if (data.refundAmount > 0) setFlash(`Booking cancelled. Refunded ${formatInr(data.refundAmount)}.`);
+                  else setFlash(refundNote ? 'Booking cancelled. No refund.' : 'Request cancelled.');
+                },
+              )
+            }
           >
             {pending ? 'Cancelling…' : 'Yes, cancel'}
           </Button>

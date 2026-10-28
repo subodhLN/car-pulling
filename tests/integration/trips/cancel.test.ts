@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db';
 import { err } from '@/lib/result';
+import * as bookings from '@/modules/bookings/service';
 import { requestBooking, transition, type Actor } from '@/modules/bookings/service';
 import * as payments from '@/modules/payments/service';
 import { cancelTrip } from '@/modules/trips/cancel';
@@ -104,4 +105,33 @@ describe('cancelTrip', () => {
     expect((await db.booking.findUniqueOrThrow({ where: { id: b } })).status).toBe('CANCELLED');
     expect((await db.trip.findUniqueOrThrow({ where: { id: trip.id } })).status).toBe('CANCELLED');
   });
+
+  it('continues after a transition throws, reporting that booking as failed', async () => {
+    const trip = await createTrip({ seatsTotal: 4 });
+    const driver: Actor = { userId: trip.driverId, kind: 'DRIVER' };
+    const ids = [await book(trip.id, 1), await book(trip.id, 1)].sort();
+    const real = bookings.transition;
+    const spy = vi.spyOn(bookings, 'transition');
+    spy.mockImplementationOnce(async () => {
+      throw new Error('connection reset');
+    });
+    spy.mockImplementation(real);
+
+    const res = await cancelTrip(trip.id, driver);
+    expect(res).toEqual({ ok: true, data: { cancelledBookings: 1, failedBookingIds: [ids[0]] } });
+    expect((await db.booking.findUniqueOrThrow({ where: { id: ids[0] } })).status).toBe('REQUESTED');
+    expect((await db.booking.findUniqueOrThrow({ where: { id: ids[1] } })).status).toBe('CANCELLED');
+  });
+
+  it('a trip that has already left → INVALID_STATE', async () => {
+    const trip = await createTrip({ departureAt: new Date(Date.now() + 3 * 60 * 60 * 1000) });
+    const later = new Date(trip.departureAt.getTime() + 60_000);
+    expect(await cancelTrip(trip.id, { userId: trip.driverId, kind: 'DRIVER' }, later)).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'This trip has already left',
+    });
+    expect((await db.trip.findUniqueOrThrow({ where: { id: trip.id } })).status).toBe('PUBLISHED');
+  });
 });
+

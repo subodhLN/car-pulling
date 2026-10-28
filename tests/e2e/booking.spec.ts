@@ -81,6 +81,8 @@ test('request → accept → phone revealed → cancel with refund preview → s
   await booking.getByRole('button', { name: 'Cancel booking' }).click();
   await expect(booking.getByText("Cancel this booking? You'll get ₹450 back.")).toBeVisible();
   await booking.getByRole('button', { name: 'Yes, cancel' }).click();
+  // The outcome shows the amount the cancel actually refunded.
+  await expect(pax.getByRole('status').filter({ hasText: 'Booking cancelled. Refunded ₹450.' })).toBeVisible();
   await expect(booking.getByText('Cancelled', { exact: true })).toBeVisible();
   await expect(booking.getByText('Refunded ₹450')).toBeVisible();
   await expect(booking.getByRole('link', { name: '+919811122233' })).toHaveCount(0);

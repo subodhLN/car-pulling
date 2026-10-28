@@ -180,7 +180,7 @@ export async function transition(
 
         const trip = await tx.trip.findUniqueOrThrow({
           where: { id: booking.tripId },
-          select: { driverId: true, departureAt: true },
+          select: { driverId: true, departureAt: true, status: true },
         });
         // Party check before any state check so non-parties learn nothing about the booking.
         if (!isParty(actor, booking, trip.driverId)) {
@@ -190,6 +190,9 @@ export async function transition(
         const to = nextStatus(from, event);
         if (!to) return err('INVALID_STATE', 'This booking can no longer be changed that way');
         if (!allowedActor(event, actor.kind)) return err('NOT_ALLOWED', "You can't change this booking");
+        if ((event === 'ACCEPT' || event === 'REJECT') && trip.status !== 'PUBLISHED') {
+          return err('INVALID_STATE', CLOSED);
+        }
 
         const lapsed =
           from === 'REQUESTED' &&
@@ -201,9 +204,13 @@ export async function transition(
           return { expired: true }; // returned (not thrown) so the expiry commits
         }
 
+        // On a trip the driver (or an admin) cancelled, every cancel refunds like a driver cancel (spec §5.3
+        // rule 4) — covers passengers and the cron re-cancel of bookings a failed cascade left open (R17).
+        // cancelledBy still records who actually cancelled.
+        const refundActor = trip.status === 'CANCELLED' ? 'DRIVER' : actor.kind;
         const refund =
           event === 'CANCEL'
-            ? refundAmount({ status: from, amount: booking.amount }, trip.departureAt, now, actor.kind)
+            ? refundAmount({ status: from, amount: booking.amount }, trip.departureAt, now, refundActor)
             : 0;
         return ok(await apply(tx, booking, event, to, actor, refund));
       }, TX_OPTIONS);
@@ -284,7 +291,7 @@ const OPEN: BookingStatus[] = ['PENDING_PAYMENT', 'REQUESTED', 'ACCEPTED'];
 
 /**
  * A passenger's bookings with a trip summary, newest first. The driver's phone is present only while
- * the booking is ACCEPTED or COMPLETED.
+ * the booking is ACCEPTED or COMPLETED and the trip has not been cancelled.
  */
 export async function listPassengerBookings(passengerId: string) {
   const rows = await db.booking.findMany({
@@ -306,12 +313,21 @@ export async function listPassengerBookings(passengerId: string) {
   });
   return rows.map((b) => ({
     ...b,
-    trip: { ...b.trip, driver: { ...b.trip.driver, phone: visiblePhone(b.status, b.trip.driver.phone) } },
+    trip: {
+      ...b.trip,
+      driver: {
+        ...b.trip.driver,
+        phone: b.trip.status === 'CANCELLED' ? null : visiblePhone(b.status, b.trip.driver.phone),
+      },
+    },
   }));
 }
 export type PassengerBooking = Awaited<ReturnType<typeof listPassengerBookings>>[number];
 
-/** The passenger's open booking on a trip (for the trip page), with the driver's phone once accepted. */
+/**
+ * The passenger's open booking on a trip (for the trip page), with the driver's phone once accepted
+ * (never on a cancelled trip).
+ */
 export async function findActiveBooking(passengerId: string, tripId: string) {
   const b = await db.booking.findFirst({
     where: { passengerId, tripId, status: { in: OPEN } },
@@ -320,12 +336,16 @@ export async function findActiveBooking(passengerId: string, tripId: string) {
       seats: true,
       amount: true,
       status: true,
-      trip: { select: { driver: { select: { phone: true } } } },
+      trip: { select: { status: true, driver: { select: { phone: true } } } },
     },
   });
   if (!b) return null;
   const { trip, ...rest } = b;
-  return { ...rest, driverPhone: visiblePhone(b.status, trip.driver.phone) };
+  return {
+    ...rest,
+    tripCancelled: trip.status === 'CANCELLED',
+    driverPhone: trip.status === 'CANCELLED' ? null : visiblePhone(b.status, trip.driver.phone),
+  };
 }
 export type ActiveBooking = NonNullable<Awaited<ReturnType<typeof findActiveBooking>>>;
 

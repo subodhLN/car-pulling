@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { BookingFlash } from '@/components/bookings/booking-actions';
 import { TripActions } from '@/components/trips/trip-actions';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,7 @@ export default async function TripPage({ params }: Props) {
             {formatInr(trip.pricePerSeat)} <span className="text-base font-semibold text-muted">per seat</span>
           </p>
           <p className="mt-2 font-semibold">{seatsLeft}</p>
+          <BookingFlash className="mt-4" />
           <TripActions trip={trip} now={new Date()} />
         </Card>
       </div>

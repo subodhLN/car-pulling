@@ -13,30 +13,44 @@ export type TickResult = {
   expired: number;
   /** Trips moved to COMPLETED by this run. */
   completed: number;
+  /** Open bookings on CANCELLED trips (left by a failed cancel cascade) cancelled by this run. */
+  recancelled: number;
 };
 
 /**
  * Walk bookings matching `where` in id order, 100 at a time, and apply `event` to each via transition()
- * as SYSTEM (so seats and payments are handled exactly once). Keyset pagination on id means a booking
+ * (as SYSTEM unless `actorFor` says otherwise), so seats and payments are handled exactly once. Keyset pagination on id means a booking
  * whose transition fails is passed over rather than retried forever; the next tick picks it up again.
  * Returns how many transitions succeeded.
  */
 async function sweep(
-  where: { status: BookingStatus; expiresAt?: { lte: Date }; trip?: { status: 'COMPLETED' } },
+  where: {
+    status: BookingStatus | { in: BookingStatus[] };
+    expiresAt?: { lte: Date };
+    trip?: { status: 'COMPLETED' | 'CANCELLED' };
+  },
   event: BookingEvent,
   now: Date,
+  actorFor: (driverId: string) => Actor = () => SYSTEM,
 ): Promise<number> {
   let done = 0;
   let after: string | undefined;
   for (;;) {
     const batch = await db.booking.findMany({
       where: { ...where, ...(after ? { id: { gt: after } } : {}) },
-      select: { id: true },
+      select: { id: true, trip: { select: { driverId: true } } },
       orderBy: { id: 'asc' },
       take: BATCH,
     });
-    for (const { id } of batch) {
-      const res = await transition(id, event, SYSTEM, now);
+    for (const { id, trip } of batch) {
+      let res: Awaited<ReturnType<typeof transition>>;
+      try {
+        res = await transition(id, event, actorFor(trip.driverId), now);
+      } catch (e) {
+        // One bad booking must not stop the tick; the next tick retries it.
+        logger.error({ err: e, bookingId: id, event }, 'cron tick: transition threw');
+        continue;
+      }
       if (res.ok) done += 1;
       // INVALID_STATE here means another actor moved it first (e.g. the driver accepted) — expected.
       else if (res.code !== 'INVALID_STATE') {
@@ -76,11 +90,20 @@ async function completeTrips(now: Date): Promise<number> {
  *    COMPLETED trip, ACCEPTED bookings → COMPLETE and leftover REQUESTED → EXPIRE. The booking sweep keys
  *    off the trip's COMPLETED status rather than "trips completed in this run", so a tick that dies between
  *    the two halves is finished by the next one.
+ * R17. Open bookings (PENDING_PAYMENT, REQUESTED, ACCEPTED) on CANCELLED trips — left by a cancelTrip cascade
+ *    whose transition failed — are cancelled as the trip's driver (CANCEL is not a SYSTEM event), so accepted
+ *    passengers get the full refund of a driver cancel. Once cancelled they no longer match: idempotent.
  */
 export async function runTick(now: Date = new Date()): Promise<TickResult> {
   let expired = await sweep({ status: 'REQUESTED', expiresAt: { lte: now } }, 'EXPIRE', now);
   const completed = await completeTrips(now);
   await sweep({ status: 'ACCEPTED', trip: { status: 'COMPLETED' } }, 'COMPLETE', now);
   expired += await sweep({ status: 'REQUESTED', trip: { status: 'COMPLETED' } }, 'EXPIRE', now);
-  return { expired, completed };
+  const recancelled = await sweep(
+    { status: { in: ['PENDING_PAYMENT', 'REQUESTED', 'ACCEPTED'] }, trip: { status: 'CANCELLED' } },
+    'CANCEL',
+    now,
+    (driverId) => ({ userId: driverId, kind: 'DRIVER' }),
+  );
+  return { expired, completed, recancelled };
 }

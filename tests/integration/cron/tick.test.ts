@@ -33,7 +33,7 @@ describe('runTick', () => {
 
     // 25 h later: the first request (expiresAt = now + 24 h) lapsed; the second (now + 26 h) has not.
     const res = await runTick(new Date(now.getTime() + 25 * HOUR));
-    expect(res).toEqual({ expired: 1, completed: 0 });
+    expect(res).toEqual({ expired: 1, completed: 0, recancelled: 0 });
     expect(await status(overdue)).toBe('EXPIRED');
     expect(await status(fresh)).toBe('REQUESTED');
     expect((await trip(t.id)).seatsAvailable).toBe(3);
@@ -70,11 +70,11 @@ describe('runTick', () => {
     await transition(a, 'ACCEPT', { userId: t.driverId, kind: 'DRIVER' }, now);
     const later = new Date(now.getTime() + 10 * HOUR);
 
-    expect(await runTick(later)).toEqual({ expired: 1, completed: 1 });
+    expect(await runTick(later)).toEqual({ expired: 1, completed: 1, recancelled: 0 });
     const snapshot = await db.booking.findMany({ orderBy: { id: 'asc' } });
     const tripSnapshot = await trip(t.id);
 
-    expect(await runTick(later)).toEqual({ expired: 0, completed: 0 });
+    expect(await runTick(later)).toEqual({ expired: 0, completed: 0, recancelled: 0 });
     expect(await db.booking.findMany({ orderBy: { id: 'asc' } })).toEqual(snapshot);
     expect(await trip(t.id)).toEqual(tripSnapshot);
     expect(await status(r)).toBe('EXPIRED');
@@ -95,8 +95,27 @@ describe('runTick', () => {
         expiresAt: new Date(now.getTime() - HOUR),
       })),
     });
-    expect(await runTick(now)).toEqual({ expired: 105, completed: 0 });
+    expect(await runTick(now)).toEqual({ expired: 105, completed: 0, recancelled: 0 });
     expect(await db.booking.count({ where: { status: 'REQUESTED' } })).toBe(0);
+  });
+
+  it('re-cancels open bookings left on a CANCELLED trip with a full refund, idempotently', async () => {
+    const now = new Date();
+    const t = await createTrip({ seatsTotal: 4, departureAt: new Date(now.getTime() + 5 * HOUR) });
+    const accepted = await book(t.id, 2, now);
+    const requested = await book(t.id, 1, now);
+    await transition(accepted, 'ACCEPT', { userId: t.driverId, kind: 'DRIVER' }, now);
+    // Simulate a cascade that flipped the trip but failed to cancel its bookings.
+    await db.trip.update({ where: { id: t.id }, data: { status: 'CANCELLED' } });
+
+    expect(await runTick(now)).toEqual({ expired: 0, completed: 0, recancelled: 2 });
+    const a = await db.booking.findUniqueOrThrow({ where: { id: accepted } });
+    expect(a).toMatchObject({ status: 'CANCELLED', cancelledBy: 'DRIVER', refundAmount: a.amount });
+    expect(await status(requested)).toBe('CANCELLED');
+    expect((await trip(t.id)).seatsAvailable).toBe(4);
+
+    expect(await runTick(now)).toEqual({ expired: 0, completed: 0, recancelled: 0 });
+    expect((await trip(t.id)).seatsAvailable).toBe(4);
   });
 });
 
@@ -122,6 +141,6 @@ describe('GET /api/cron/tick', () => {
     vi.stubEnv('CRON_SECRET', 'test-cron-secret');
     const res = await call('Bearer test-cron-secret');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ expired: 0, completed: 0 });
+    expect(await res.json()).toEqual({ expired: 0, completed: 0, recancelled: 0 });
   });
 });

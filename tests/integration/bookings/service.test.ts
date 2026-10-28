@@ -545,3 +545,32 @@ describe('dashboard reads', () => {
     expect(byName.get('Meera')?.passenger).not.toHaveProperty('email');
   });
 });
+
+describe('trip status guards (R17)', () => {
+  it('passenger cancel of ACCEPTED within 24 h on a CANCELLED trip refunds in full', async () => {
+    const { trip, bookingId, driver, pax } = await booked(1, { departureAt: new Date(Date.now() + 5 * HOUR) });
+    await transition(bookingId, 'ACCEPT', driver);
+    await db.trip.update({ where: { id: trip.id }, data: { status: 'CANCELLED' } });
+    const res = await transition(bookingId, 'CANCEL', pax);
+    expect(res).toMatchObject({ ok: true, data: { status: 'CANCELLED', cancelledBy: 'PASSENGER' } });
+    if (res.ok) expect(res.data.refundAmount).toBe(res.data.amount);
+    expect(await seatsLeft(trip.id)).toBe(3);
+  });
+
+  it('ACCEPT and REJECT on a trip that is not PUBLISHED → INVALID_STATE', async () => {
+    const { trip, bookingId, driver } = await booked(1);
+    await db.trip.update({ where: { id: trip.id }, data: { status: 'CANCELLED' } });
+    expect(await transition(bookingId, 'ACCEPT', driver)).toMatchObject({ ok: false, code: 'INVALID_STATE' });
+    expect(await transition(bookingId, 'REJECT', driver)).toMatchObject({ ok: false, code: 'INVALID_STATE' });
+    expect((await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).status).toBe('REQUESTED');
+  });
+
+  it('hides the driver phone from an ACCEPTED booking once the trip is CANCELLED', async () => {
+    const driverUser = await createUser({ phone: '+919811111111' });
+    const { trip, bookingId, driver, passenger } = await booked(1, { driverId: driverUser.id });
+    await transition(bookingId, 'ACCEPT', driver);
+    await db.trip.update({ where: { id: trip.id }, data: { status: 'CANCELLED' } });
+    expect((await listPassengerBookings(passenger.id))[0].trip.driver.phone).toBeNull();
+    expect(await findActiveBooking(passenger.id, trip.id)).toMatchObject({ status: 'ACCEPTED', driverPhone: null });
+  });
+});

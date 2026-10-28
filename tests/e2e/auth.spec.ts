@@ -1,4 +1,4 @@
-import { expect, signUp, test, uniqueEmail } from './helpers';
+import { expect, signUp, test, uniqueEmail, uniqueIp } from './helpers';
 
 test('sign up → name in header → log out → log in; protected route redirects', async ({ page }) => {
   const email = uniqueEmail('e2e');
@@ -43,7 +43,7 @@ test('signup shows inline field errors', async ({ page }) => {
 
 test.describe('login rate limit', () => {
   // A fixed-per-run client IP for all 11 attempts (the helpers' default is already unique per test).
-  test.use({ extraHTTPHeaders: { 'x-real-ip': `203.0.113.${Math.floor(Math.random() * 250) + 1}` } });
+  test.use({ extraHTTPHeaders: { 'x-real-ip': uniqueIp() } });
   test('the 11th attempt shows the rate-limit copy', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill('nobody@example.com');

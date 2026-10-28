@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CancelBookingButton } from '@/components/bookings/booking-actions';
+import { BookingFlash, CancelBookingButton } from '@/components/bookings/booking-actions';
 import { StatusBadge } from '@/components/bookings/status-badge';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { ButtonLink } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatInr } from '@/lib/money';
@@ -26,7 +27,7 @@ function BookingCard({ booking, now, upcoming }: { booking: PassengerBooking; no
             </Link>
             <p className="text-sm text-muted">{formatIst(trip.departureAt, 'EEE, d MMM yyyy · h:mm a')}</p>
           </div>
-          <StatusBadge status={booking.status} />
+          {trip.status === 'CANCELLED' ? <Badge>Trip cancelled by the driver</Badge> : <StatusBadge status={booking.status} />}
         </div>
         <div className="flex items-center gap-3">
           <Avatar name={driverName} image={trip.driver.image} size={40} />
@@ -85,6 +86,7 @@ export default async function PassengerBookingsPage() {
   if (bookings.length === 0) {
     return (
       <div className="space-y-4">
+        <BookingFlash />
         <p className="text-muted">You haven&apos;t booked any rides yet.</p>
         <ButtonLink href="/search">Find a ride</ButtonLink>
       </div>
@@ -99,9 +101,12 @@ export default async function PassengerBookingsPage() {
   const past = bookings.filter((b) => !isUpcoming(b));
 
   return (
-    <div className="space-y-8">
-      <Section title="Upcoming" bookings={upcoming} now={now} upcoming />
-      <Section title="Past" bookings={past} now={now} upcoming={false} />
-    </div>
+    <>
+      <BookingFlash className="mb-6" />
+      <div className="space-y-8">
+        <Section title="Upcoming" bookings={upcoming} now={now} upcoming />
+        <Section title="Past" bookings={past} now={now} upcoming={false} />
+      </div>
+    </>
   );
 }

@@ -31,6 +31,15 @@ export async function TripActions({ trip, now }: { trip: TripForActions; now: Da
   }
 
   const booking = user ? await findActiveBooking(user.id, trip.id) : null;
+  if (booking?.tripCancelled) {
+    // An open booking left by a failed cancel cascade; the cron tick cancels it with a full refund (R17).
+    return (
+      <div className="mt-4 space-y-1 border-t border-line pt-4">
+        <p className="text-sm font-semibold">Your booking</p>
+        <p className="text-sm">Trip cancelled by the driver</p>
+      </div>
+    );
+  }
   if (booking) {
     const seats = `${booking.seats} ${booking.seats === 1 ? 'seat' : 'seats'}`;
     return (

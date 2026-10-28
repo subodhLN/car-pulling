@@ -7,6 +7,8 @@ import type { BookingStatus } from '@/modules/bookings/transitions';
 /** Statuses a CANCEL event can leave from (PENDING_PAYMENT only exists from M5). */
 const CANCELLABLE: BookingStatus[] = ['PENDING_PAYMENT', 'REQUESTED', 'ACCEPTED'];
 
+const LEFT = 'This trip has already left';
+
 export type CancelTripResult = { cancelledBookings: number; failedBookingIds: string[] };
 
 /**
@@ -22,8 +24,9 @@ export type CancelTripResult = { cancelledBookings: number; failedBookingIds: st
  * 2. Each open booking is cancelled by transition() in its own transaction, which locks Booking then Trip
  *    — the same order as every other transition, and step 1 holds no lock while it runs — so no lock
  *    cycle with passenger cancels (Booking → Trip) or requests (Trip → Booking insert) can form.
- * A booking whose transition fails (e.g. PAYMENT_FAILED) is logged and reported in failedBookingIds; the
- * rest still run. Bookings another party moved concurrently (e.g. the passenger cancelled first) are
+ * A booking whose transition fails or throws (e.g. PAYMENT_FAILED) is logged and reported in
+ * failedBookingIds; the rest still run. The cron tick re-cancels any open booking left on a CANCELLED trip,
+ * and transition() refunds such bookings in full whoever cancels them. Bookings another party moved concurrently (e.g. the passenger cancelled first) are
  * simply skipped.
  */
 export async function cancelTrip(
@@ -31,15 +34,16 @@ export async function cancelTrip(
   actor: Actor,
   now: Date = new Date(),
 ): Promise<Result<CancelTripResult>> {
-  const trip = await db.trip.findUnique({ where: { id: tripId }, select: { driverId: true } });
+  const trip = await db.trip.findUnique({ where: { id: tripId }, select: { driverId: true, departureAt: true } });
   if (!trip) return err('NOT_FOUND', 'Trip not found');
   const allowed =
     actor.kind === 'ADMIN' || (actor.kind === 'DRIVER' && actor.userId !== null && actor.userId === trip.driverId);
   if (!allowed) return err('NOT_ALLOWED', "You can't cancel this trip");
+  if (trip.departureAt.getTime() <= now.getTime()) return err('INVALID_STATE', LEFT);
 
   const flipped = await db.$executeRaw`
     UPDATE "Trip" SET "status" = 'CANCELLED'
-    WHERE "id" = ${tripId} AND "status" = 'PUBLISHED'`;
+    WHERE "id" = ${tripId} AND "status" = 'PUBLISHED' AND "departureAt" > ${now}`;
   if (flipped === 0) return err('INVALID_STATE', 'This trip can no longer be cancelled');
 
   const open = await db.booking.findMany({
@@ -51,7 +55,15 @@ export async function cancelTrip(
   let cancelledBookings = 0;
   const failedBookingIds: string[] = [];
   for (const { id } of open) {
-    const res = await transition(id, 'CANCEL', actor, now);
+    let res: Awaited<ReturnType<typeof transition>>;
+    try {
+      res = await transition(id, 'CANCEL', actor, now);
+    } catch (e) {
+      // e.g. a dropped connection: keep going; the cron tick re-cancels it (runTick, R17).
+      logger.error({ err: e, tripId, bookingId: id }, 'cancelTrip: booking cancel threw');
+      failedBookingIds.push(id);
+      continue;
+    }
     if (res.ok) {
       cancelledBookings += 1;
       continue;
