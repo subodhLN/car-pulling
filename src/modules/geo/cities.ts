@@ -1,6 +1,6 @@
-export type LatLng = { lat: number; lng: number };
+import type { Place } from './types';
 
-export type Place = { label: string; lat: number; lng: number };
+export type { LatLng, Place } from './types';
 
 /** M1 place list: the ten seed cities plus pickup areas used in the mockups. M2 swaps search for Photon. */
 export const CITIES: (Place & { slug: string })[] = [
@@ -36,3 +36,20 @@ export const ROUTE_CITY_SLUGS = [
 ] as const;
 
 export const ROUTE_CITIES = CITIES.filter((c) => (ROUTE_CITY_SLUGS as readonly string[]).includes(c.slug));
+
+const MAX_LIST_RESULTS = 8;
+
+/** M1 matching over the fixed list: label-prefix matches first, then substring matches, each alphabetical. */
+export function searchCityList(q: string): Place[] {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return [];
+  const prefix: Place[] = [];
+  const inside: Place[] = [];
+  for (const { label, lat, lng } of CITIES) {
+    const at = label.toLowerCase().indexOf(needle);
+    if (at === 0) prefix.push({ label, lat, lng });
+    else if (at > 0) inside.push({ label, lat, lng });
+  }
+  const byLabel = (a: Place, b: Place) => a.label.localeCompare(b.label);
+  return [...prefix.sort(byLabel), ...inside.sort(byLabel)].slice(0, MAX_LIST_RESULTS);
+}

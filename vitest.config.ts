@@ -4,6 +4,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
+    env: { GEO_PROVIDER: 'fake', NEXT_PUBLIC_MAP_TILES: 'off' },
     projects: [
       {
         extends: true,

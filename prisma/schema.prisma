@@ -171,3 +171,12 @@ model RateLimit {
   count       Int
   windowStart DateTime
 }
+
+/// Cache for Photon/OSRM responses (spec §4). Null and failed results are never stored.
+model GeoCache {
+  key       String   @id
+  response  Json
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

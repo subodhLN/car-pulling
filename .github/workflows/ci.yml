@@ -35,6 +35,8 @@ jobs:
       DATABASE_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
       DIRECT_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
       DATABASE_URL_TEST: postgresql://rideshare:rideshare@localhost:5432/rideshare_test
+      SHADOW_DATABASE_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare_shadow
+      GEO_PROVIDER: fake
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,6 +47,10 @@ jobs:
       - run: npx prisma migrate deploy
         if: hashFiles('prisma/schema.prisma') != ''
       - run: npm run test:int
+      - name: Schema drift check
+        run: |
+          PGPASSWORD=rideshare psql -h localhost -U rideshare -d rideshare_test -c "CREATE DATABASE rideshare_shadow"
+          npm run db:drift
 
   e2e:
     # Slow (dev server + browser): only on pushes to main.
@@ -70,6 +76,8 @@ jobs:
       AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
       AUTH_TRUST_HOST: 'true'
       CRON_SECRET: ci-only-cron-secret
+      GEO_PROVIDER: fake
+      NEXT_PUBLIC_MAP_TILES: 'off'
       # Reseed the throwaway CI database so the demo-login spec runs too.
       E2E_SEED: '1'
     steps:

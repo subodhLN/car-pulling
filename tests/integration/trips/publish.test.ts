@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
 import type { Place } from '@/modules/geo/cities';
-import { haversineKm } from '@/modules/geo/service';
+import { route } from '@/modules/geo/service';
 import { getTrip, publishTrip } from '@/modules/trips/service';
 import { resetDb } from '../../helpers/db';
 import { createUser, createVehicle } from '../../helpers/factories';
@@ -97,9 +97,11 @@ describe('publishTrip', () => {
     expect(trip!.seatsAvailable).toBe(2);
     expect(trip!.pricePerSeat).toBe(45000);
     expect(trip!.notes).toBe('Quiet ride');
-    expect(trip!.durationMin).toBeNull();
-    expect(trip!.distanceKm).toBe(Math.round(haversineKm(delhi, jaipur))); // haversine fallback, rounded
-    expect(Math.abs(trip!.distanceKm - 236)).toBeLessThanOrEqual(2);
+    // M2: the (fake) provider's route is stored on publish
+    const expected = await route(delhi, jaipur);
+    expect(trip!.durationMin).toBe(expected!.durationMin);
+    expect(trip!.distanceKm).toBe(expected!.distanceKm);
+    expect(trip!.routePolyline).toBe(expected!.polyline);
     expect(trip!.driver).toMatchObject({ id: driver.id, name: 'Asha Rao', ratingCount: 0, status: 'ACTIVE' });
     expect(trip!.vehicle).toMatchObject({ id: vehicle.id, make: 'Maruti' });
   });
