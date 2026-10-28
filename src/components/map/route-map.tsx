@@ -22,7 +22,7 @@ export function RouteMap({ className, ...props }: RouteMapProps) {
   return (
     <div
       className={cn('relative overflow-hidden rounded-card border border-line bg-[var(--map-land)]', className)}
-      role="img"
+      role="region"
       aria-label={`Map of the route from ${props.origin.label} to ${props.dest.label}`}
     >
       <Inner {...props} />

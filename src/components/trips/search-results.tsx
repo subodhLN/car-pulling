@@ -47,7 +47,7 @@ export function SearchResults({ items, searched, header, empty, footer }: Props)
         polyline={selected?.routePolyline ?? null}
       />
       {selected ? (
-        <p className="pointer-events-none absolute right-4 bottom-4 left-4 max-w-sm rounded-[16px] bg-surface px-4 py-3 text-sm shadow-float">
+        <p className="pointer-events-none absolute top-4 right-16 left-4 max-w-sm rounded-[16px] bg-surface px-4 py-3 text-sm shadow-float">
           {routeSummary({
             originLabel: selected.originLabel,
             durationMin: selected.durationMin,

@@ -56,6 +56,12 @@ export function PublishForm({ cars, minDate }: { cars: CarOption[]; minDate: str
   const [pickerKeys, setPickerKeys] = useState({ origin: 0, dest: 0 });
   const [mapFor, setMapFor] = useState<'origin' | 'dest' | null>(null);
 
+  // The dialog (and, after a pick, the picker) unmount, so the browser can't restore focus itself.
+  function closeMap(field: 'origin' | 'dest' | null) {
+    setMapFor(null);
+    if (field) requestAnimationFrame(() => document.getElementById(field)?.focus());
+  }
+
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const raw = Object.fromEntries(new FormData(e.currentTarget));
@@ -179,13 +185,13 @@ export function PublishForm({ cars, minDate }: { cars: CarOption[]; minDate: str
         key={mapFor ?? 'closed'}
         open={mapFor !== null}
         initial={mapFor ? places[mapFor] : null}
-        onClose={() => setMapFor(null)}
+        onClose={() => closeMap(mapFor)}
         onPick={(p) => {
           const field = mapFor!;
           const place = { label: p.label, lat: p.lat, lng: p.lng };
           setPlaces((cur) => ({ ...cur, [field]: place }));
           setPickerKeys((k) => ({ ...k, [field]: k[field] + 1 }));
-          setMapFor(null);
+          closeMap(field);
         }}
       />
     </form>

@@ -7,7 +7,7 @@ export const USER_AGENT = 'RideShare/1.0 (portfolio demo)';
 
 type Feature = {
   geometry?: { coordinates?: [number, number] };
-  properties?: { name?: string; city?: string; county?: string; state?: string };
+  properties?: { name?: string; city?: string; county?: string; state?: string; countrycode?: string };
 };
 
 // "Jaipur Municipal Corporation" and "Jaipur Tehsil" should read as "Jaipur".
@@ -17,7 +17,8 @@ const clean = (s: string) => s.replace(ADMIN_SUFFIX, '').trim();
 function toSuggestion(f: Feature): PlaceSuggestion | null {
   const p = f.properties ?? {};
   const coords = f.geometry?.coordinates;
-  if (!p.name || !coords) return null;
+  // The India bbox also covers parts of Pakistan, Nepal, Bhutan, Bangladesh and Sri Lanka.
+  if (!p.name || !coords || p.countrycode !== 'IN') return null;
   const context = [p.city, p.county, p.state]
     .filter((s): s is string => Boolean(s))
     .map(clean)

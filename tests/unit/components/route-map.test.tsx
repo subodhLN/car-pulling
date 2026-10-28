@@ -10,6 +10,7 @@ class FakeMap {
   handlers: Record<string, Handler[]> = {};
   setStyle = vi.fn((...args: unknown[]) => {
     void args;
+    this.styleLoaded = false;
     this.layers = [];
     this.sources = {};
   });
@@ -28,6 +29,8 @@ class FakeMap {
     (this.listeners[ev] ?? []).forEach((h) => h());
   }
   emit(ev: string) {
+    if (ev === 'style.load') this.styleLoaded = true;
+    (this.listeners[ev] ?? []).forEach((h) => h());
     const hs = this.handlers[ev] ?? [];
     this.handlers[ev] = [];
     hs.forEach((h) => h());
@@ -54,7 +57,10 @@ class FakeMap {
   removeLayer(id: string) {
     this.layers = this.layers.filter((l) => l.id !== id);
   }
-  setPaintProperty() {}
+  styleLoaded = true;
+  setPaintProperty = vi.fn(() => {
+    if (!this.styleLoaded) throw new Error('Style is not done loading.');
+  });
   remove() {}
 }
 
@@ -131,8 +137,46 @@ describe('RouteMapInner', () => {
         [75.7873, 26.9124],
         [77.209, 28.6139],
       ],
-      expect.objectContaining({ padding: { top: 48, right: 48, bottom: 96, left: 48 }, animate: false }),
+      expect.objectContaining({ padding: { top: 96, right: 48, bottom: 48, left: 48 }, animate: false }),
     );
+  });
+
+  it('redraws when the route changes after the first load, even while tiles are still loading', () => {
+    const { rerender } = render(<RouteMapInner origin={DELHI} dest={JAIPUR} polyline={poly} />);
+    act(() => FakeMap.last.emit('style.load'));
+    // FakeMap.isStyleLoaded() is false (as it is in MapLibre while tiles stream in)
+    const AGRA = { lat: 27.1767, lng: 78.0081, label: 'Agra' };
+    rerender(<RouteMapInner origin={DELHI} dest={AGRA} polyline={null} />);
+    const route = FakeMap.last.sources.route.data as { geometry: { coordinates: number[][] } };
+    expect(route.geometry.coordinates.at(-1)).toEqual([AGRA.lng, AGRA.lat]);
+    expect(container()).toHaveAttribute('data-route-state', 'straight');
+  });
+
+  it('stops the draw-in animation before switching style', async () => {
+    setMotion(false);
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      frames[id - 1] = () => {};
+    });
+    render(<RouteMapInner origin={DELHI} dest={JAIPUR} polyline={poly} />);
+    act(() => FakeMap.last.emit('style.load'));
+    await act(async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      await Promise.resolve();
+    });
+    // A frame scheduled before the switch must not touch the not-yet-loaded new style.
+    expect(() => frames.forEach((f) => f(performance.now() + 100))).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the map credits expanded after load', () => {
+    render(<RouteMapInner origin={DELHI} dest={JAIPUR} polyline={poly} />);
+    const attrib = document.createElement('div');
+    attrib.className = 'maplibregl-ctrl-attrib maplibregl-compact maplibregl-compact-show';
+    container().appendChild(attrib);
+    act(() => FakeMap.last.emit('load'));
+    expect(attrib).toHaveClass('maplibregl-compact-show');
   });
 
   it('re-styles on theme change and keeps the route', async () => {

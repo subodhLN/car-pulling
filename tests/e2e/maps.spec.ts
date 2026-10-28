@@ -8,6 +8,16 @@ test('trip and search pages show route maps that follow the focused ride and the
   const first = await publishTrip(page, { daysOut, time: '01:10' });
   const second = await publishTrip(page, { daysOut, time: '01:40', addCar: false });
 
+  // "Choose on map…" returns focus to its picker when the dialog closes.
+  await gotoReady(page, '/trips/new');
+  const from = page.getByRole('combobox', { name: 'From' });
+  await from.pressSequentially('De');
+  await page.getByRole('option', { name: 'Choose on map…' }).click();
+  await expect(page.getByRole('dialog', { name: 'Choose on map' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'From' })).toBeFocused();
+
   // Trip page: the stored (fake) route is drawn.
   await gotoReady(page, first);
   await expect(page.getByTestId('route-map')).toHaveAttribute('data-route-state', 'drawn');

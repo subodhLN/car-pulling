@@ -25,8 +25,8 @@ export type RouteData = {
 const LAYERS = ['route-casing', 'route-line', 'pickup', 'dest'] as const;
 const SOURCES = ['route', 'pins'] as const;
 const DRAW_MS = 1600;
-// Extra room at the bottom for the summary card that overlays the map.
-export const FIT_PADDING = { top: 48, right: 48, bottom: 96, left: 48 };
+// Extra room at the top for the summary card that overlays the map.
+export const FIT_PADDING = { top: 96, right: 48, bottom: 48, left: 48 };
 
 export function routeData(origin: LatLng, dest: LatLng, polyline: string | null): RouteData {
   const line = polyline

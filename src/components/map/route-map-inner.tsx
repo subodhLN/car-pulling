@@ -18,6 +18,9 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
   const shownTheme = useRef<MapTheme | null>(null);
   const cancelDraw = useRef<() => void>(() => {});
   const latest = useRef<{ bounds: [[number, number], [number, number]] } | null>(null);
+  // MapLibre's isStyleLoaded() is false whenever tiles or sources are still loading, and `style.load`
+  // fires only once per style, so track readiness ourselves.
+  const styleReady = useRef(false);
   const theme = useResolvedTheme();
   const [state, setState] = useState<State>('pending');
   const data = useMemo(
@@ -43,10 +46,9 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
     m.on('resize', () => {
       if (latest.current) m.fitBounds(latest.current.bounds, { padding: FIT_PADDING, animate: false });
     });
-    // Start with the compact credits collapsed so they don't cover the summary card.
-    m.on('load', () =>
-      el.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show'),
-    );
+    m.on('style.load', () => {
+      styleReady.current = true;
+    });
     map.current = m;
     shownTheme.current = theme;
     return () => {
@@ -67,9 +69,11 @@ export function RouteMapInner({ origin, dest, polyline }: Omit<RouteMapProps, 'c
     };
     if (shownTheme.current !== theme) {
       shownTheme.current = theme;
+      cancelDraw.current(); // the animation must not touch the outgoing style
+      styleReady.current = false;
       m.setStyle(mapStyle({ theme, tiles: tilesOn() }), { diff: false });
       m.once('style.load', draw);
-    } else if (m.isStyleLoaded()) {
+    } else if (styleReady.current) {
       draw();
     } else {
       m.once('style.load', draw);

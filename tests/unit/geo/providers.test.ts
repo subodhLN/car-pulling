@@ -43,6 +43,18 @@ describe('photon provider', () => {
     expect(new Headers((init as RequestInit).headers).get('user-agent')).toMatch(/^RideShare/);
   });
 
+  it('drops features outside India even inside the bbox (e.g. Lahore)', async () => {
+    mockFetch({
+      features: [
+        { geometry: { coordinates: [74.3436, 31.5497] }, properties: { name: 'Lahore', state: 'Punjab', countrycode: 'PK' } },
+        { geometry: { coordinates: [75.8573, 30.901] }, properties: { name: 'Ludhiana', state: 'Punjab', countrycode: 'IN' } },
+      ],
+    });
+    expect((await photonProvider.search('la', 10)).map((p) => p.label)).toEqual(['Ludhiana, Punjab']);
+    mockFetch({ features: [{ geometry: { coordinates: [85.32, 27.71] }, properties: { name: 'Kathmandu', countrycode: 'NP' } }] });
+    expect(await photonProvider.reverse({ lat: 27.71, lng: 85.32 })).toBeNull();
+  });
+
   it('drops features without a name', async () => {
     mockFetch({ features: [{ geometry: { coordinates: [75.8, 26.9] }, properties: { state: 'Rajasthan' } }] });
     expect(await photonProvider.search('x', 10)).toEqual([]);
