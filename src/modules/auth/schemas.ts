@@ -9,7 +9,8 @@ export function normalizeIndianPhone(input: string): string | null {
   return m ? `+91${m[1]}` : null;
 }
 
-const phoneField = z
+/** Optional phone: blank → undefined, otherwise normalised to +91… (shared by sign-up and profile editing). */
+export const phoneField = z
   .string()
   .optional()
   .transform((v, ctx) => {
