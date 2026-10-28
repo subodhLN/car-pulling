@@ -20,7 +20,9 @@ export type PopularRoute = {
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** Same lead time search uses, so a card never promises rides search hides. */
 const MIN_LEAD_MS = 60 * 60 * 1000;
-const MATCH_METERS = 25_000;
+/** Cities match within this radius; card links search with the same radius so counts agree. */
+export const MATCH_RADIUS_KM = 25;
+const MATCH_METERS = MATCH_RADIUS_KM * 1000;
 
 type Row = {
   o: string;

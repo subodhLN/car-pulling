@@ -51,7 +51,8 @@ async function main() {
   const credits: Credit[] = PHOTOS.map((p) => ({
     file: `/${p.file}`,
     subject: p.subject,
-    unsplashUrl: `https://unsplash.com/photos/${p.id}`,
+    // The CDN URL is the one form known to resolve for these ids (photo pages use other slugs).
+    unsplashUrl: `https://images.unsplash.com/photo-${p.id}`,
   }));
   await writeFile(path.join(publicDir, 'images', 'credits.json'), `${JSON.stringify(credits, null, 2)}\n`);
   console.log(`images/credits.json  ${credits.length} entries`);

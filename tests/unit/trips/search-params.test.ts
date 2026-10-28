@@ -83,6 +83,13 @@ describe('searchHref', () => {
     expect(r.query).toMatchObject({ from: { lat: 28.5, lng: 77.1 }, date: '2026-11-03' });
   });
 
+  it('adds radius when given (live route cards search with the 25 km match radius), and parse accepts it', () => {
+    const href = searchHref({ from: 'delhi', to: 'jaipur', date: '2026-11-02', radius: 25 });
+    expect(href).toBe('/search?from=delhi&to=jaipur&date=2026-11-02&radius=25');
+    const r = parseSearchParams(Object.fromEntries(new URLSearchParams(href.split('?')[1])), NOW);
+    expect(r.query?.radiusKm).toBe(25);
+  });
+
   it('accepts a city slug in place of a place', () => {
     expect(searchHref({ from: 'chandigarh', to: 'shimla', date: '2026-11-07' })).toBe(
       '/search?from=chandigarh&to=shimla&date=2026-11-07',

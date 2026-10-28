@@ -117,11 +117,18 @@ export function setPlaceParam(key: 'from' | 'to', place: Place | string, out: UR
 }
 
 /** A /search URL that parseSearchParams accepts. Places may be given as CITIES slugs. */
-export function searchHref(input: { from: Place | string; to: Place | string; date: string; seats?: number }): string {
+export function searchHref(input: {
+  from: Place | string;
+  to: Place | string;
+  date: string;
+  seats?: number;
+  radius?: number;
+}): string {
   const params = new URLSearchParams();
   setPlaceParam('from', input.from, params);
   setPlaceParam('to', input.to, params);
   params.set('date', input.date);
   if (input.seats !== undefined) params.set('seats', String(input.seats));
+  if (input.radius !== undefined) params.set('radius', String(input.radius));
   return `/search?${params.toString()}`;
 }

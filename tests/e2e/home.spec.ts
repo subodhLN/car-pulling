@@ -20,7 +20,9 @@ test('home shows the hero, four popular route cards and the trust section', asyn
   const cards = popular.getByRole('listitem').getByRole('link');
   await expect(cards).toHaveCount(4);
   for (const card of await cards.all()) {
-    await expect(card).toHaveAttribute('href', /^\/search\?from=[a-z-]+&to=[a-z-]+&date=\d{4}-\d{2}-\d{2}$/);
+    await expect(card).toHaveAttribute('href', /^\/search\?from=[a-z-]+&to=[a-z-]+&date=\d{4}-\d{2}-\d{2}(&radius=25)?$/);
+    const badge = (await card.textContent()) ?? '';
+    if (/\d+ rides?/.test(badge)) await expect(card).toHaveAttribute('href', /&radius=25$/);
     await expect(card).toHaveAccessibleName(/^\S.* to \S.*/);
     const img = card.getByRole('img');
     await expect(img).toBeVisible();
@@ -94,6 +96,10 @@ test.describe('on a 400 px phone', () => {
 test('credits lists every photo with an Unsplash link', async ({ page }) => {
   await page.goto('/credits');
   await expect(page.getByRole('heading', { level: 1, name: 'Photo credits' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Photo on Unsplash/ })).toHaveCount(6);
+  await expect(page.getByRole('link', { name: /View original on Unsplash/ })).toHaveCount(6);
+  for (const link of await page.getByRole('link', { name: /View original on Unsplash/ }).all()) {
+    await expect(link).toHaveAttribute('href', /^https:\/\/images\.unsplash\.com\/photo-[\w-]+$/);
+  }
+  await expect(page.getByText(/used under the/)).toContainText('Unsplash License');
   await expect(page.getByText('Jaipur — Amer Fort', { exact: true })).toBeVisible();
 });

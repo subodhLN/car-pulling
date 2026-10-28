@@ -7,7 +7,7 @@ import { TrustSection } from '@/components/home/trust-section';
 import { formatInr } from '@/lib/money';
 import { formatIst, istDayRange } from '@/lib/time';
 import { CITIES } from '@/modules/geo/cities';
-import { popularRoutes, type PopularRoute } from '@/modules/trips/popular';
+import { MATCH_RADIUS_KM, popularRoutes, type PopularRoute } from '@/modules/trips/popular';
 import { searchHref } from '@/modules/trips/search-params';
 
 const CARDS = 4;
@@ -40,7 +40,12 @@ function formatDuration(min: number): string {
 function liveCard(r: PopularRoute): RouteCardProps {
   return {
     // Both ends are matched route cities, so their slugs always exist (destSlug is null only if the list lacks one).
-    href: searchHref({ from: r.originSlug, to: r.destSlug ?? r.destLabel.toLowerCase(), date: r.nextDate }),
+    href: searchHref({
+      from: r.originSlug,
+      to: r.destSlug ?? r.destLabel.toLowerCase(),
+      date: r.nextDate,
+      radius: MATCH_RADIUS_KM, // the radius the ride count was computed with
+    }),
     originLabel: r.originLabel,
     destLabel: r.destLabel,
     destSlug: r.destSlug,

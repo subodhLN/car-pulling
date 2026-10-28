@@ -34,7 +34,7 @@ export default function CreditsPage() {
               rel="noopener noreferrer"
               className="flex-none border-b-[1.5px] border-current pb-px text-sm font-semibold transition-colors hover:text-muted"
             >
-              Photo on Unsplash<span className="sr-only">: {c.subject}</span>
+              View original on Unsplash<span className="sr-only">: {c.subject}</span>
             </a>
           </li>
         ))}
