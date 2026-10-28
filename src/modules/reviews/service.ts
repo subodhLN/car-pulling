@@ -91,6 +91,9 @@ export async function postReview(
 
   try {
     const review = await db.$transaction(async (tx) => {
+      // Lock the subject first: under READ COMMITTED the recompute's subqueries would otherwise use a snapshot
+      // taken before a concurrent review of the same person committed, and drop it from the aggregate.
+      await tx.$executeRaw`SELECT 1 FROM "User" WHERE "id" = ${subjectId} FOR UPDATE`;
       const created = await tx.review.create({
         data: { tripId, authorId, subjectId, rating, comment: comment ?? null, createdAt: now },
         select: { id: true },

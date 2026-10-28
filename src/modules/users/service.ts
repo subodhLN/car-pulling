@@ -36,7 +36,10 @@ export async function getPublicProfile(userId: string): Promise<PublicProfile | 
   });
   if (!user) return null;
   const [ridesAsDriver, ridesAsPassenger, reviews] = await Promise.all([
-    db.trip.count({ where: { driverId: userId, status: 'COMPLETED' } }),
+    db.trip.count({
+      // A completed trip nobody rode on is not a ride.
+      where: { driverId: userId, status: 'COMPLETED', bookings: { some: { status: 'COMPLETED' } } },
+    }),
     db.booking.count({ where: { passengerId: userId, status: 'COMPLETED' } }),
     listReviewsFor(userId),
   ]);

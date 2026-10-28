@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BookingStatus } from '@prisma/client';
 import { db } from '@/lib/db';
-import { listReviewsFor, pendingReviews, postReview, reviewDeadline } from '@/modules/reviews/service';
+import { listReviewsFor, pendingReviews, postReview, recomputeRating, reviewDeadline } from '@/modules/reviews/service';
 import { resetDb } from '../../helpers/db';
 import { createTrip, createUser } from '../../helpers/factories';
 
@@ -89,6 +89,22 @@ describe('postReview', () => {
     expect([a.ok, b.ok].sort()).toEqual([false, true]);
     expect(await db.review.count()).toBe(1);
     expect(await ratingOf(driver.id)).toEqual({ avg: 5, count: 1 });
+  });
+
+  it('two passengers rating the driver at the same moment are both counted', async () => {
+    const { driver, passenger, trip } = await ride();
+    const other = await createUser();
+    await db.booking.create({ data: { tripId: trip.id, passengerId: other.id, seats: 1, amount: 45000, status: 'COMPLETED' } });
+    let posting: Promise<unknown> | undefined;
+    // A writes its review and recomputes, then stays open while B posts; B must see A's review once A commits.
+    await db.$transaction(async (tx) => {
+      await tx.review.create({ data: { tripId: trip.id, authorId: other.id, subjectId: driver.id, rating: 1 } });
+      await recomputeRating(tx, driver.id);
+      posting = postReview(passenger.id, { tripId: trip.id, subjectId: driver.id, rating: 5 }, soon);
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(await posting).toMatchObject({ ok: true });
+    expect(await ratingOf(driver.id)).toEqual({ avg: 3, count: 2 });
   });
 
   it('ratingAvg 5, 4, 4 → 4.33 with count 3; a single 1 → 1.00', async () => {

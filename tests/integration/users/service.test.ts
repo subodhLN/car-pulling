@@ -53,8 +53,11 @@ describe('getPublicProfile', () => {
     const u = await createUser();
     const other = await createUser();
     for (const status of ['COMPLETED', 'COMPLETED', 'PUBLISHED', 'CANCELLED'] as TripStatus[]) {
-      await createTrip({ driverId: u.id, departureAt, status });
+      const t = await createTrip({ driverId: u.id, departureAt, status });
+      await booking(t.id, other.id, status === 'COMPLETED' ? 'COMPLETED' : 'CANCELLED');
     }
+    // A completed trip nobody rode on is not a ride.
+    await createTrip({ driverId: u.id, departureAt, status: 'COMPLETED' });
     for (const status of ['COMPLETED', 'CANCELLED', 'REJECTED'] as BookingStatus[]) {
       const t = await createTrip({ driverId: other.id, departureAt, status: 'COMPLETED' });
       await booking(t.id, u.id, status);
