@@ -55,7 +55,10 @@ export function safeNext(next: string | null | undefined): string {
     const base = 'http://local.invalid';
     const url = new URL(next, base);
     if (url.origin !== base) return '/';
-    return url.pathname + url.search + url.hash;
+    const result = url.pathname + url.search + url.hash;
+    // Dot-segment normalisation can turn "/.//evil.com" into "//evil.com" (protocol-relative): check the RESULT.
+    if (result.startsWith('//') || result.includes('\\')) return '/';
+    return result;
   } catch {
     return '/';
   }

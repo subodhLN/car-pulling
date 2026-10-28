@@ -46,12 +46,15 @@ describe('safeNext', () => {
 });
 
 describe('safeNext open-redirect cases', () => {
-  it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '//evil.com', '/\\evil.com', 'https://evil.com', '%2F%2Fevil.com'])(
+  it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '//evil.com', '/\\evil.com', 'https://evil.com', '%2F%2Fevil.com', '/.//evil.com', '/a/..//evil.com', '/..//evil.com', '/%2e%2e//evil.com', '/%2e//evil.com', '/a/%2E%2E//evil.com'])(
     'rejects %j',
     (input) => {
       expect(safeNext(input)).toBe('/');
     },
   );
+  it('normalises harmless dot segments', () => {
+    expect(safeNext('/./dashboard')).toBe('/dashboard');
+  });
   it('keeps path, query and hash', () => {
     expect(safeNext('/dashboard/trips?x=1#h')).toBe('/dashboard/trips?x=1#h');
   });
