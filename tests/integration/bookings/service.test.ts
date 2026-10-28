@@ -100,6 +100,22 @@ describe('requestBooking', () => {
     expect(await seatsLeft(soon.id)).toBe(3);
   });
 
+  it("suspended driver's trip → INVALID_STATE 'no longer available', no seats held", async () => {
+    const trip = await createTrip();
+    await db.user.update({ where: { id: trip.driverId }, data: { status: 'SUSPENDED' } });
+    const p = await createUser();
+    expect(await requestBooking(p.id, trip.id, 1)).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'This ride is no longer available',
+    });
+    expect(await seatsLeft(trip.id)).toBe(3);
+    expect(await db.booking.count()).toBe(0);
+    // Reinstated: bookable again.
+    await db.user.update({ where: { id: trip.driverId }, data: { status: 'ACTIVE' } });
+    expect((await requestBooking(p.id, trip.id, 1)).ok).toBe(true);
+  });
+
   it('second request by the same passenger → INVALID_STATE, seats held once', async () => {
     const { trip, passenger } = await booked(1);
     expect(await requestBooking(passenger.id, trip.id, 1)).toMatchObject({
@@ -203,7 +219,7 @@ describe('transition', () => {
     });
   });
 
-  it('admin can accept any booking', async () => {
+  it('an ADMIN-kind actor (internal callers only; actorFor never grants it in M1) can accept any booking', async () => {
     const { bookingId } = await booked(1);
     const admin = await createUser({ role: 'ADMIN' });
     expect(await transition(bookingId, 'ACCEPT', { userId: admin.id, kind: 'ADMIN' })).toMatchObject({
@@ -430,7 +446,7 @@ describe('deadlock / serialization retry (fix round 1)', () => {
 });
 
 describe('actorFor', () => {
-  it('maps passenger, driver, admin and strangers', async () => {
+  it('maps passenger and driver; strangers and non-party admins cannot act', async () => {
     const { trip, passenger, bookingId } = await booked(1);
     const admin = await createUser({ role: 'ADMIN' });
     const stranger = await createUser();
@@ -442,10 +458,15 @@ describe('actorFor', () => {
       userId: trip.driverId,
       kind: 'DRIVER',
     });
-    expect(await actorFor(bookingId, { id: admin.id, role: 'ADMIN' })).toEqual({ userId: admin.id, kind: 'ADMIN' });
     // A stranger gets a party kind that transition() will reject with NOT_ALLOWED.
     const s = await actorFor(bookingId, { id: stranger.id, role: 'USER' });
     expect(await transition(bookingId, 'CANCEL', s)).toMatchObject({ ok: false, code: 'NOT_ALLOWED' });
+    // R21: in M1 an admin who is not a party has no extra powers (admin tooling arrives in M6).
+    const a = await actorFor(bookingId, { id: admin.id, role: 'ADMIN' });
+    expect(a.kind).not.toBe('ADMIN');
+    expect(await transition(bookingId, 'ACCEPT', a)).toMatchObject({ ok: false, code: 'NOT_ALLOWED' });
+    expect(await transition(bookingId, 'CANCEL', a)).toMatchObject({ ok: false, code: 'NOT_ALLOWED' });
+    expect(await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).toMatchObject({ status: 'REQUESTED' });
   });
 });
 

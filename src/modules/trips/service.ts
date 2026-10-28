@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Trip, Vehicle } from '@prisma/client';
+import type { Trip, UserStatus, Vehicle } from '@prisma/client';
 import { db } from '@/lib/db';
 import { err, ok, type Result } from '@/lib/result';
 import type { Place } from '@/modules/geo/cities';
@@ -17,7 +17,14 @@ export type PublishTripInput = {
 };
 
 export type TripView = Omit<Trip, 'distanceKm'> & {
-  driver: { id: string; name: string | null; image: string | null; ratingAvg: number; ratingCount: number };
+  driver: {
+    id: string;
+    name: string | null;
+    image: string | null;
+    ratingAvg: number;
+    ratingCount: number;
+    status: UserStatus;
+  };
   vehicle: Vehicle;
   origin: Place;
   dest: Place;
@@ -87,7 +94,7 @@ export async function getTrip(id: string): Promise<TripView | null> {
   const trip = await db.trip.findUnique({
     where: { id },
     include: {
-      driver: { select: { id: true, name: true, image: true, ratingAvg: true, ratingCount: true } },
+      driver: { select: { id: true, name: true, image: true, ratingAvg: true, ratingCount: true, status: true } },
       vehicle: true,
     },
   });

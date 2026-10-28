@@ -32,4 +32,13 @@ describe('Avatar', () => {
     const el = screen.getByRole('img', { name: 'Rohit Sharma' });
     expect(el).toHaveStyle({ width: '48px', height: '48px' });
   });
+
+  it('centres the initials with a single display mode (no inline-block fighting grid)', () => {
+    render(<Avatar name="Rohit Sharma" size={48} />);
+    const classes = screen.getByRole('img', { name: 'Rohit Sharma' }).className.split(/\s+/);
+    expect(classes).toContain('inline-grid');
+    expect(classes).toContain('place-items-center');
+    expect(classes).not.toContain('inline-block');
+    expect(classes).not.toContain('grid');
+  });
 });

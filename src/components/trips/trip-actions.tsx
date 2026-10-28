@@ -3,10 +3,8 @@ import { RequestForm } from '@/components/bookings/request-form';
 import { StatusBadge } from '@/components/bookings/status-badge';
 import { ButtonLink } from '@/components/ui/button';
 import { optionalUser } from '@/modules/auth/guards';
-import { refundPreview } from '@/modules/bookings/presentation';
+import { refundPreview, requestAvailability } from '@/modules/bookings/presentation';
 import { findActiveBooking } from '@/modules/bookings/service';
-
-const REQUEST_CUTOFF_MS = 60 * 60 * 1000;
 
 type TripForActions = {
   id: string;
@@ -15,12 +13,12 @@ type TripForActions = {
   seatsAvailable: number;
   pricePerSeat: number;
   departureAt: Date;
+  driver: { status: 'ACTIVE' | 'SUSPENDED' };
 };
 
 /** The booking area of the trip page: what the current viewer can do with this trip. */
 export async function TripActions({ trip, now }: { trip: TripForActions; now: Date }) {
   const user = await optionalUser();
-  const open = trip.status === 'PUBLISHED' && trip.departureAt.getTime() > now.getTime() + REQUEST_CUTOFF_MS;
 
   if (user && user.id === trip.driverId) {
     return (
@@ -69,8 +67,8 @@ export async function TripActions({ trip, now }: { trip: TripForActions; now: Da
     );
   }
 
-  if (!open) return <p className="mt-4 text-sm font-semibold text-muted">This ride is no longer taking requests</p>;
-  if (trip.seatsAvailable === 0) return <p className="mt-4 text-sm font-semibold text-muted">This ride is full</p>;
+  const availability = requestAvailability(trip, now);
+  if (!availability.open) return <p className="mt-4 text-sm font-semibold text-muted">{availability.message}</p>;
 
   if (!user) {
     return (

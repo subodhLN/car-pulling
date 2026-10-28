@@ -100,8 +100,16 @@ describe('publishTrip', () => {
     expect(trip!.durationMin).toBeNull();
     expect(trip!.distanceKm).toBe(Math.round(haversineKm(delhi, jaipur))); // haversine fallback, rounded
     expect(Math.abs(trip!.distanceKm - 236)).toBeLessThanOrEqual(2);
-    expect(trip!.driver).toMatchObject({ id: driver.id, name: 'Asha Rao', ratingCount: 0 });
+    expect(trip!.driver).toMatchObject({ id: driver.id, name: 'Asha Rao', ratingCount: 0, status: 'ACTIVE' });
     expect(trip!.vehicle).toMatchObject({ id: vehicle.id, make: 'Maruti' });
+  });
+
+  it("getTrip exposes the driver's account status (suspended drivers' trips are not bookable)", async () => {
+    const { driver, input } = await setup();
+    const res = await publishTrip(driver.id, input, now);
+    if (!res.ok) throw new Error(res.message);
+    await db.user.update({ where: { id: driver.id }, data: { status: 'SUSPENDED' } });
+    expect((await getTrip(res.data.id))!.driver.status).toBe('SUSPENDED');
   });
 
   it('getTrip returns null for an unknown id', async () => {

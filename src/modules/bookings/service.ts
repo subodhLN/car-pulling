@@ -19,6 +19,7 @@ const MIN_REQUEST_LEAD_MS = 60 * 60 * 1000;
 const MIN_SEATS = 1;
 const MAX_SEATS = 4;
 const CLOSED = 'This trip is no longer taking requests';
+const UNAVAILABLE = 'This ride is no longer available';
 // Concurrent requests queue on the Trip row lock; give them room instead of Prisma's 2 s / 5 s defaults.
 const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 
@@ -91,16 +92,18 @@ export async function requestBooking(
         const [held] = await tx.$queryRaw<HeldTrip[]>`
           UPDATE "Trip" SET "seatsAvailable" = "seatsAvailable" - ${seats}
           WHERE "id" = ${tripId} AND "seatsAvailable" >= ${seats} AND "status" = 'PUBLISHED'
+            AND EXISTS (SELECT 1 FROM "User" u WHERE u."id" = "Trip"."driverId" AND u."status" = 'ACTIVE')
           RETURNING "driverId", "departureAt", "pricePerSeat"`;
 
         if (!held) {
           // No hold taken: classify why from a plain read (nothing to roll back).
           const trip = await tx.trip.findUnique({
             where: { id: tripId },
-            select: { driverId: true, status: true, departureAt: true },
+            select: { driverId: true, status: true, departureAt: true, driver: { select: { status: true } } },
           });
           if (!trip) return err('NOT_FOUND', 'Trip not found');
           if (trip.driverId === passengerId) return err('NOT_ALLOWED', "You can't book your own trip");
+          if (trip.driver.status !== 'ACTIVE') return err('INVALID_STATE', UNAVAILABLE);
           if (trip.status !== 'PUBLISHED' || tooLate(trip.departureAt)) return err('INVALID_STATE', CLOSED);
           return err('TRIP_FULL', 'Not enough seats left on this trip');
         }
@@ -264,9 +267,10 @@ async function apply(
 
 /**
  * Derive the acting role of a signed-in user for a booking. Parties act as themselves (so cancelledBy
- * records PASSENGER/DRIVER even for admins who are parties); other admins act as ADMIN. Anyone else gets a
- * PASSENGER actor that transition() rejects with NOT_ALLOWED. Party ids never change, so reading outside
- * the transition's lock is safe.
+ * records PASSENGER/DRIVER even for admins who are parties). Anyone else — including an ADMIN who is not a
+ * party (R21: no admin powers until M6 adds admin tooling) — gets a PASSENGER actor that transition()
+ * rejects with NOT_ALLOWED. transition() still supports the ADMIN kind for internal callers. Party ids
+ * never change, so reading outside the transition's lock is safe.
  */
 export async function actorFor(bookingId: string, user: { id: string; role: 'USER' | 'ADMIN' }): Promise<Actor> {
   const b = await db.booking.findUnique({
@@ -275,7 +279,6 @@ export async function actorFor(bookingId: string, user: { id: string; role: 'USE
   });
   if (b?.passengerId === user.id) return { userId: user.id, kind: 'PASSENGER' };
   if (b?.trip.driverId === user.id) return { userId: user.id, kind: 'DRIVER' };
-  if (user.role === 'ADMIN') return { userId: user.id, kind: 'ADMIN' };
   return { userId: user.id, kind: 'PASSENGER' };
 }
 

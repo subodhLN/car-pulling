@@ -45,3 +45,45 @@ jobs:
       - run: npx prisma migrate deploy
         if: hashFiles('prisma/schema.prisma') != ''
       - run: npm run test:int
+
+  e2e:
+    # Slow (dev server + browser): only on pushes to main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: rideshare
+          POSTGRES_PASSWORD: rideshare
+          POSTGRES_DB: rideshare
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rideshare"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare
+      DIRECT_URL: postgresql://rideshare:rideshare@localhost:5432/rideshare
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
+      AUTH_TRUST_HOST: 'true'
+      CRON_SECRET: ci-only-cron-secret
+      # Reseed the throwaway CI database so the demo-login spec runs too.
+      E2E_SEED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/

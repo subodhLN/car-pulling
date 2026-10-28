@@ -32,7 +32,9 @@ type AvatarProps = {
 
 export function Avatar({ name, image, size = 32, className }: AvatarProps) {
   const box = { width: size, height: size };
-  const classes = cn('inline-block flex-none rounded-full', className);
+  // No display class here: the photo and the initials each set exactly one (two display utilities on one
+  // element resolve by stylesheet order, which left the initials top-left).
+  const classes = cn('flex-none rounded-full', className);
 
   if (image) {
     return (
@@ -44,7 +46,7 @@ export function Avatar({ name, image, size = 32, className }: AvatarProps) {
         width={size}
         height={size}
         style={box}
-        className={cn(classes, 'bg-soft object-cover')}
+        className={cn(classes, 'inline-block bg-soft object-cover')}
         referrerPolicy="no-referrer"
       />
     );
@@ -55,7 +57,7 @@ export function Avatar({ name, image, size = 32, className }: AvatarProps) {
       role="img"
       aria-label={name}
       style={{ ...box, backgroundColor: avatarTone(name), fontSize: Math.max(10, Math.round(size * 0.4)) }}
-      className={cn(classes, 'grid place-items-center leading-none font-bold text-white select-none')}
+      className={cn(classes, 'inline-grid place-items-center leading-none font-bold text-white select-none')}
     >
       {initials(name)}
     </span>

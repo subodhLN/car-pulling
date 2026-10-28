@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { formatInr } from '@/lib/money';
 import { formatIst } from '@/lib/time';
 import { requirePageUser } from '@/modules/auth/guards';
-import { isOpen, refundPreview } from '@/modules/bookings/presentation';
+import { isOpen, refundPreview, showsTripCancelled } from '@/modules/bookings/presentation';
 import { listPassengerBookings, type PassengerBooking } from '@/modules/bookings/service';
 
 export const metadata: Metadata = { title: 'Your bookings' };
@@ -27,7 +27,11 @@ function BookingCard({ booking, now, upcoming }: { booking: PassengerBooking; no
             </Link>
             <p className="text-sm text-muted">{formatIst(trip.departureAt, 'EEE, d MMM yyyy · h:mm a')}</p>
           </div>
-          {trip.status === 'CANCELLED' ? <Badge>Trip cancelled by the driver</Badge> : <StatusBadge status={booking.status} />}
+          {showsTripCancelled(booking, trip.status) ? (
+            <Badge>Trip cancelled by the driver</Badge>
+          ) : (
+            <StatusBadge status={booking.status} />
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Avatar name={driverName} image={trip.driver.image} size={40} />
