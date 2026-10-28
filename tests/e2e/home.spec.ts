@@ -102,4 +102,11 @@ test('credits lists every photo with an Unsplash link', async ({ page }) => {
   }
   await expect(page.getByText(/used under the/)).toContainText('Unsplash License');
   await expect(page.getByText('Jaipur — Amer Fort', { exact: true })).toBeVisible();
+  // Map data credits (M2)
+  await expect(page.getByRole('heading', { name: 'Map data' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toHaveAttribute(
+    'href',
+    'https://www.openstreetmap.org/copyright',
+  );
+  await expect(page.getByRole('link', { name: 'OpenFreeMap' })).toHaveAttribute('href', 'https://openfreemap.org');
 });

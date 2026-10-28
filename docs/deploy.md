@@ -21,6 +21,8 @@ Set these in Vercel under **Settings > Environment Variables** for **Production*
 | `NEXT_PUBLIC_APP_URL` | Your public URL, e.g. `https://your-app.vercel.app` |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional. Enables "Continue with Google". |
 | `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | Optional. Set to `false` to hide the demo-accounts panel on `/login` (shown by default). |
+| `GEO_PROVIDER` | Leave **unset** in production (live Photon place search + OSRM routing). `fake` is for tests and CI only. |
+| `NEXT_PUBLIC_MAP_TILES` | Leave **unset** (map tiles on). `off` is for tests and CI only. |
 
 **Preview deploys:** never give Preview the production `DATABASE_URL` or `DIRECT_URL`. Either enable Neon's preview-branch integration (each Preview deploy gets its own Neon branch and connection strings), or create a separate database and set its pooled URL as `DATABASE_URL` for the Preview environment (Preview does not need `DIRECT_URL`). Preview builds never run migrations (see step 3), so a separate Preview database must be migrated by hand: `DIRECT_URL='<preview direct url>' DATABASE_URL='<preview direct url>' npx prisma migrate deploy`.
 
@@ -44,7 +46,19 @@ DATABASE_URL='<direct neon url>' DIRECT_URL='<direct neon url>' SEED_ALLOW=1 npm
 
 The demo panel also exposes `admin@demo.test`. In M1 the admin account has no extra powers: it cannot act on other people's bookings or trips (admin tooling arrives in M6), but set `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` and/or delete the demo accounts before M6 ships.
 
-## 5. Cron tick
+## 5. Maps (M2)
+
+Place search uses the public [Photon](https://photon.komoot.io) instance, routes use the public [OSRM](https://project-osrm.org) demo server and map tiles come from [OpenFreeMap](https://openfreemap.org). All are free and need no keys. The public Photon and OSRM servers are meant for light use, which fits a portfolio demo; results are cached in the `GeoCache` table (places 24 h, routes 30 days) and searches are limited to 30 a minute per user. For real traffic, self-host them and change the base URLs in `src/modules/geo/providers/photon.ts` and `osrm.ts`.
+
+If any trips were published before M2 (or while OSRM was down) they have no stored route and show a dashed straight line. Fill them in once after deploying M2, from your machine:
+
+```bash
+DATABASE_URL='<direct neon url>' DIRECT_URL='<direct neon url>' npm run routes:backfill
+```
+
+It makes one OSRM request per trip, one second apart. The seed needs no network: it uses the precomputed routes in `prisma/seed-routes.json` (regenerate with `npm run seed:routes` if you change the seed corridors).
+
+## 6. Cron tick
 
 `/api/cron/tick` expires stale requests, completes finished trips and re-cancels bookings stuck on cancelled trips. It should run every 15 minutes, but Vercel's Hobby plan rejects crons more frequent than daily, so there are two schedulers:
 
@@ -55,7 +69,7 @@ The demo panel also exposes `admin@demo.test`. In M1 the admin account has no ex
 
   Without these secrets the workflow prints a notice and exits successfully. You can also run it by hand from the **Actions** tab (**Run workflow**). GitHub may delay scheduled runs by several minutes, and disables scheduled workflows after 60 days without repository activity (re-enable it from the Actions tab).
 
-## 6. Smoke test
+## 7. Smoke test
 
 After the first deploy and seed, on the live URL:
 
@@ -69,3 +83,6 @@ After the first deploy and seed, on the live URL:
 - [ ] The same URL without the header is rejected
 - [ ] Run the **Cron tick** workflow manually in GitHub Actions and confirm it succeeds
 - [ ] Sign up a new account and publish a trip end to end
+- [ ] Place search finds a place that is not one of the ten cities (e.g. "Hawa Mahal"); "Choose on map…" drops a pin and names it
+- [ ] The trip page shows the road route on a styled map, in light and dark themes
+- [ ] On search results, hovering a ride switches the map to its route

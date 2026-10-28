@@ -11,6 +11,7 @@
  * bookings are inserted directly with the same SQL shape as tests/helpers/factories.ts.
  */
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { BookingStatus, CancelledBy } from '@prisma/client';
 import { db } from '@/lib/db';
 import { assertSafeSeedTarget } from './seed-guard';
@@ -18,8 +19,10 @@ import { DEMO_PASSWORD } from '@/modules/auth/demo-accounts';
 import { signUp } from '@/modules/auth/service';
 import { requestBooking, transition } from '@/modules/bookings/service';
 import { ROUTE_CITIES, type Place } from '@/modules/geo/cities';
-import { haversineKm } from '@/modules/geo/service';
+import { haversineKm, primeRoute } from '@/modules/geo/service';
+import type { RouteInfo } from '@/modules/geo/types';
 import { publishTrip } from '@/modules/trips/service';
+import { CORRIDORS } from './seed-corridors';
 import { createVehicle } from '@/modules/vehicles/service';
 
 try {
@@ -97,13 +100,7 @@ const city = (slug: string): Place => {
   return { label: c.label, lat: c.lat, lng: c.lng };
 };
 
-/** Popular corridors (both directions are used). */
-const CORRIDORS: [string, string][] = [
-  ['delhi', 'jaipur'], ['delhi', 'chandigarh'], ['delhi', 'agra'], ['delhi', 'dehradun'], ['delhi', 'amritsar'],
-  ['delhi', 'ludhiana'], ['gurugram', 'jaipur'], ['gurugram', 'chandigarh'], ['noida', 'agra'], ['noida', 'dehradun'],
-  ['chandigarh', 'shimla'], ['chandigarh', 'amritsar'], ['chandigarh', 'ludhiana'], ['chandigarh', 'dehradun'],
-  ['ludhiana', 'amritsar'], ['jaipur', 'agra'], ['delhi', 'shimla'], ['gurugram', 'agra'],
-];
+
 
 /** Rough road fare: ~₹2.2 per km per seat, rounded to ₹10, in paise and within the allowed ₹50-₹5,000. */
 function fare(a: Place, b: Place): number {
@@ -163,6 +160,19 @@ async function createUsers(): Promise<{ driver: Person; passenger: Person; admin
   return { driver, passenger, admin, others };
 }
 
+/** Precomputed OSRM routes (scripts/fetch-seed-routes.ts), keyed "fromSlug->toSlug", so seeding needs no network. */
+const SEED_ROUTES: Record<string, RouteInfo> = JSON.parse(readFileSync('prisma/seed-routes.json', 'utf8'));
+const slugOf = (p: Place) => ROUTE_CITIES.find((c) => c.lat === p.lat && c.lng === p.lng)?.slug;
+const seedRoute = (a: Place, b: Place): RouteInfo | null => SEED_ROUTES[`${slugOf(a)}->${slugOf(b)}`] ?? null;
+
+/** Puts every precomputed route in the geo cache, so publishTrip's route() lookups are cache hits. */
+async function primeSeedRoutes(): Promise<void> {
+  for (const [key, info] of Object.entries(SEED_ROUTES)) {
+    const [a, b] = key.split('->').map((slug) => ROUTE_CITIES.find((c) => c.slug === slug)!);
+    await primeRoute(a, b, info);
+  }
+}
+
 async function insertPastTrip(t: {
   driverId: string;
   vehicleId: string;
@@ -174,13 +184,15 @@ async function insertPastTrip(t: {
   pricePerSeat: number;
 }): Promise<string> {
   const id = randomUUID();
+  const r = seedRoute(t.from, t.to);
   await db.$executeRaw`
     INSERT INTO "Trip" ("id","driverId","vehicleId","originLabel","originPoint","destLabel","destPoint",
-      "departureAt","seatsTotal","seatsAvailable","pricePerSeat","status")
+      "routePolyline","distanceKm","durationMin","departureAt","seatsTotal","seatsAvailable","pricePerSeat","status")
     VALUES (${id}, ${t.driverId}, ${t.vehicleId}, ${t.from.label},
       ST_SetSRID(ST_MakePoint(${t.from.lng}, ${t.from.lat}),4326)::geography,
       ${t.to.label},
       ST_SetSRID(ST_MakePoint(${t.to.lng}, ${t.to.lat}),4326)::geography,
+      ${r?.polyline ?? null}, ${r?.distanceKm ?? null}, ${r?.durationMin ?? null},
       ${t.departureAt}, ${t.seatsTotal}, ${t.seatsAvailable}, ${t.pricePerSeat}, 'COMPLETED'::"TripStatus")`;
   return id;
 }
@@ -212,6 +224,7 @@ async function insertPastBooking(b: {
 
 async function main() {
   await reset();
+  await primeSeedRoutes();
   const { driver, passenger, admin, others } = await createUsers();
   const everyone = [driver, passenger, admin, ...others];
 

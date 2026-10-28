@@ -55,13 +55,20 @@ export async function reversePlace(p: LatLng): Promise<PlaceSuggestion | null> {
   }
 }
 
+const routeKey = (a: LatLng, b: LatLng) => `route:${pointKey(a)};${pointKey(b)}`;
+
 export async function route(a: LatLng, b: LatLng): Promise<RouteInfo | null> {
   try {
-    return await cached(`route:${pointKey(a)};${pointKey(b)}`, ROUTE_TTL_MS, () => getProvider().route(a, b));
+    return await cached(routeKey(a, b), ROUTE_TTL_MS, () => getProvider().route(a, b));
   } catch (e) {
     logger.warn({ err: e }, 'routing failed; trip will show a straight line');
     return null;
   }
+}
+
+/** Stores a known route (e.g. the seed's precomputed ones) so route() serves it without the network. */
+export async function primeRoute(a: LatLng, b: LatLng, info: RouteInfo): Promise<void> {
+  await cached(routeKey(a, b), ROUTE_TTL_MS, async () => info);
 }
 
 /** Spec §10.2: geo autocomplete 30/min per user (per IP when signed out). Reverse shares the bucket. */

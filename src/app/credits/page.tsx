@@ -39,6 +39,19 @@ export default function CreditsPage() {
           </li>
         ))}
       </ul>
+
+      <h2 className="mt-12 text-xl font-bold tracking-tight">Map data</h2>
+      <p className="mt-2 max-w-[60ch] text-muted">
+        Map data ©{' '}
+        <a className="font-semibold text-fg underline" href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">
+          OpenStreetMap contributors
+        </a>
+        , map tiles by{' '}
+        <a className="font-semibold text-fg underline" href="https://openfreemap.org" rel="noopener noreferrer">
+          OpenFreeMap
+        </a>
+        , place search by Photon and driving routes by OSRM.
+      </p>
     </div>
   );
 }

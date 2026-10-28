@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db';
 import { cached } from '@/modules/geo/cache';
 import { getProvider } from '@/modules/geo/providers';
-import { reversePlace, route, searchPlaces } from '@/modules/geo/service';
+import { primeRoute, reversePlace, route, searchPlaces } from '@/modules/geo/service';
 import { resetDb } from '../../helpers/db';
 
 const DELHI = { lat: 28.6139, lng: 77.209 };
@@ -92,5 +92,13 @@ describe('geo service (fake provider)', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRejectedValueOnce(new Error('down'));
     expect(await route(JAIPUR, DELHI)).toBeNull();
+  });
+
+  it('primeRoute stores a known route so route() needs no provider call', async () => {
+    const known = { polyline: '_p~iF~ps|U', distanceKm: 284.9, durationMin: 217 };
+    await primeRoute(DELHI, JAIPUR, known);
+    const spy = vi.spyOn(getProvider(), 'route');
+    expect(await route(DELHI, JAIPUR)).toEqual(known);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

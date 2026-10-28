@@ -34,12 +34,19 @@ async function shot(page: Page, file: string) {
   await page.screenshot({ path: `${OUT}/${file}` });
 }
 
-async function context(browser: Browser, opts: { width: number; height: number; scheme: 'light' | 'dark'; ip: string }) {
+/** Map pages never reach network idle while tiles stream: wait for our route layers, then let tiles settle. */
+async function waitForMap(page: Page) {
+  await page.waitForLoadState('load');
+  await page.locator('[data-route-state="drawn"], [data-route-state="straight"]').first().waitFor();
+  await page.waitForTimeout(8000);
+}
+
+// No extraHTTPHeaders: a custom header on cross-origin tile requests triggers a CORS preflight the tile server refuses.
+async function context(browser: Browser, opts: { width: number; height: number; scheme: 'light' | 'dark' }) {
   const ctx = await browser.newContext({
     viewport: { width: opts.width, height: opts.height },
     colorScheme: opts.scheme,
     deviceScaleFactor: 1,
-    extraHTTPHeaders: { 'x-real-ip': opts.ip },
   });
   return { ctx, page: await ctx.newPage() };
 }
@@ -56,27 +63,27 @@ async function main() {
 
   const browser = await chromium.launch();
   try {
-    const desktop = await context(browser, { width: 1280, height: 800, scheme: 'light', ip: '10.9.0.1' });
+    const desktop = await context(browser, { width: 1280, height: 800, scheme: 'light' });
     await desktop.page.goto(BASE);
     await desktop.page.waitForLoadState('networkidle');
     await shot(desktop.page, 'home-desktop-light.png');
     await login(desktop.page, 'passenger@demo.test');
     await desktop.page.goto(`${BASE}/search?from=delhi&to=jaipur&date=${trip.day}`);
-    await desktop.page.waitForLoadState('networkidle');
+    await waitForMap(desktop.page);
     await shot(desktop.page, 'search-results.png');
     await desktop.page.goto(`${BASE}/trips/${trip.id}`);
-    await desktop.page.waitForLoadState('networkidle');
+    await waitForMap(desktop.page);
     await shot(desktop.page, 'trip-page.png');
     await desktop.ctx.close();
 
-    const driver = await context(browser, { width: 1280, height: 900, scheme: 'light', ip: '10.9.0.2' });
+    const driver = await context(browser, { width: 1280, height: 900, scheme: 'light' });
     await login(driver.page, 'driver@demo.test');
     await driver.page.goto(`${BASE}/dashboard/trips`);
     await driver.page.waitForLoadState('networkidle');
     await shot(driver.page, 'driver-dashboard.png');
     await driver.ctx.close();
 
-    const mobile = await context(browser, { width: 390, height: 844, scheme: 'dark', ip: '10.9.0.3' });
+    const mobile = await context(browser, { width: 390, height: 844, scheme: 'dark' });
     await mobile.page.goto(BASE);
     await mobile.page.waitForLoadState('networkidle');
     await shot(mobile.page, 'home-mobile-dark.png');

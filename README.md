@@ -1,6 +1,6 @@
 # RideShare
 
-RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern India. Drivers publish a trip with seats and a price; passengers search by route and date, request seats, and the driver accepts or rejects. Phone numbers are shared only once a booking is accepted. Built with Next.js, Prisma and Postgres/PostGIS. This is milestone M1 (core booking loop); payments, maps, messaging and reviews follow in later milestones.
+RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern India. Drivers publish a trip with seats and a price; passengers search by route and date, request seats, and the driver accepts or rejects. Phone numbers are shared only once a booking is accepted. Built with Next.js, Prisma and Postgres/PostGIS. Milestones M1 (core booking loop) and M2 (maps) are done; reviews, messaging, payments and admin follow.
 
 | Home (desktop, light) | Home (mobile, dark) |
 | --- | --- |
@@ -24,6 +24,13 @@ RideShare is a BlaBlaCar-style carpool web app for intercity trips in northern I
 - Cron tick: expire stale requests, complete finished trips
 - Phone numbers revealed only while a booking is accepted or completed
 - Light and dark themes, reduced-motion support, mobile layout
+
+## M2 features (maps)
+
+- Place search anywhere in India (Photon), with a "Choose on map…" pin picker and a fallback to the built-in city list
+- Driving routes (OSRM) stored on every trip: road distance, duration and arrival time
+- Token-styled MapLibre maps (OpenFreeMap tiles) in light and dark: route preview when publishing, a map on every trip page, and a search map that follows the ride you hover or focus
+- Geo results cached in Postgres, searches rate-limited, and everything degrades to a straight line or the city list if a service is down
 
 ## Architecture
 

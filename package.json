@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:drift": "tsx scripts/check-drift.ts",
-    "routes:backfill": "tsx scripts/backfill-routes.ts"
+    "routes:backfill": "tsx scripts/backfill-routes.ts",
+    "seed:routes": "tsx scripts/fetch-seed-routes.ts"
   },
   "dependencies": {
     "@auth/core": "0.41.3",
