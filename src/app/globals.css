@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '../styles/tokens.css';
+@import 'maplibre-gl/dist/maplibre-gl.css';
 
 @theme inline {
   --color-bg: var(--bg);
