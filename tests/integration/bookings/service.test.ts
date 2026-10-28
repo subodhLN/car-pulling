@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { err } from '@/lib/result';
 import {
   actorFor,
@@ -259,6 +260,170 @@ describe('transition', () => {
     expect(await transition(bookingId, 'REJECT', driver)).toMatchObject({ ok: false, code: 'PAYMENT_FAILED' });
     expect((await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).status).toBe('REQUESTED');
     expect(await seatsLeft(trip.id)).toBe(1);
+  });
+});
+
+describe('transition: inline expiry (fix round 1)', () => {
+  async function expiring() {
+    const ctx = await booked(2);
+    const b = await db.booking.findUniqueOrThrow({ where: { id: ctx.bookingId } });
+    return { ...ctx, expiresAt: b.expiresAt! };
+  }
+
+  it('ACCEPT after expiresAt → INVALID_STATE, booking EXPIRED, seats returned once, hold released', async () => {
+    const capture = vi.spyOn(payments, 'capture');
+    const release = vi.spyOn(payments, 'release');
+    const { trip, bookingId, driver, expiresAt } = await expiring();
+    const late = new Date(expiresAt.getTime() + 1);
+    expect(await transition(bookingId, 'ACCEPT', driver, late)).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'This request has expired',
+    });
+    expect((await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).status).toBe('EXPIRED');
+    expect(await seatsLeft(trip.id)).toBe(3);
+    expect(capture).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledWith(bookingId);
+    // A second late attempt sees EXPIRED and must not return seats again.
+    expect(await transition(bookingId, 'ACCEPT', driver, late)).toMatchObject({ ok: false, code: 'INVALID_STATE' });
+    expect(await seatsLeft(trip.id)).toBe(3);
+  });
+
+  it('ACCEPT exactly at expiresAt is already too late', async () => {
+    const { bookingId, driver, expiresAt } = await expiring();
+    expect(await transition(bookingId, 'ACCEPT', driver, expiresAt)).toMatchObject({
+      ok: false,
+      message: 'This request has expired',
+    });
+  });
+
+  it('REJECT after expiresAt → INVALID_STATE, booking EXPIRED, seats returned once', async () => {
+    const { trip, bookingId, driver, expiresAt } = await expiring();
+    expect(await transition(bookingId, 'REJECT', driver, new Date(expiresAt.getTime() + 60_000))).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'This request has expired',
+    });
+    expect((await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).status).toBe('EXPIRED');
+    expect(await seatsLeft(trip.id)).toBe(3);
+  });
+
+  it('ACCEPT 1 ms before expiresAt still works', async () => {
+    const { trip, bookingId, driver, expiresAt } = await expiring();
+    expect(await transition(bookingId, 'ACCEPT', driver, new Date(expiresAt.getTime() - 1))).toMatchObject({
+      ok: true,
+      data: { status: 'ACCEPTED' },
+    });
+    expect(await seatsLeft(trip.id)).toBe(1);
+  });
+
+  it('non-party ACCEPT after expiry → NOT_ALLOWED and nothing changes', async () => {
+    const { trip, bookingId, pax, expiresAt } = await expiring();
+    expect(await transition(bookingId, 'ACCEPT', pax, new Date(expiresAt.getTime() + 1))).toMatchObject({
+      ok: false,
+      code: 'NOT_ALLOWED',
+    });
+    expect((await db.booking.findUniqueOrThrow({ where: { id: bookingId } })).status).toBe('REQUESTED');
+    expect(await seatsLeft(trip.id)).toBe(1);
+  });
+
+  it('passenger CANCEL after expiresAt still cancels (only ACCEPT/REJECT expire inline)', async () => {
+    const { bookingId, pax, expiresAt } = await expiring();
+    expect(await transition(bookingId, 'CANCEL', pax, new Date(expiresAt.getTime() + 1))).toMatchObject({
+      ok: true,
+      data: { status: 'CANCELLED' },
+    });
+  });
+});
+
+describe('requestBooking uses the locked trip row (fix round 1)', () => {
+  it('rejects own full trip with NOT_ALLOWED, and a full trip within 1 h with INVALID_STATE', async () => {
+    const now = new Date();
+    const full = await createTrip({ seatsTotal: 1, seatsAvailable: 0 });
+    expect(await requestBooking(full.driverId, full.id, 1, now)).toMatchObject({ ok: false, code: 'NOT_ALLOWED' });
+    const soonFull = await createTrip({ seatsTotal: 1, seatsAvailable: 0, departureAt: new Date(now.getTime() + HOUR) });
+    const p = await createUser();
+    expect(await requestBooking(p.id, soonFull.id, 1, now)).toMatchObject({ ok: false, code: 'INVALID_STATE' });
+  });
+
+  it('amount uses the price on the locked row', async () => {
+    const trip = await createTrip({ pricePerSeat: 12300 });
+    const p = await createUser();
+    const res = await requestBooking(p.id, trip.id, 3);
+    if (!res.ok) throw new Error(res.code);
+    expect((await db.booking.findUniqueOrThrow({ where: { id: res.data.bookingId } })).amount).toBe(36900);
+  });
+});
+
+describe('deadlock / serialization retry (fix round 1)', () => {
+  const conflict = () =>
+    new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock', {
+      code: 'P2034',
+      clientVersion: Prisma.prismaVersion.client,
+    });
+
+  it('requestBooking retries once, then returns INVALID_STATE "Please try again"', async () => {
+    const trip = await createTrip();
+    const p = await createUser();
+    const spy = vi.spyOn(db, '$transaction').mockRejectedValue(conflict());
+    expect(await requestBooking(p.id, trip.id, 1)).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'Please try again',
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('requestBooking succeeds when the retry succeeds', async () => {
+    const trip = await createTrip();
+    const p = await createUser();
+    const spy = vi.spyOn(db, '$transaction').mockRejectedValueOnce(conflict());
+    expect((await requestBooking(p.id, trip.id, 1)).ok).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(await seatsLeft(trip.id)).toBe(2);
+  });
+
+  it('transition retries once, then returns INVALID_STATE "Please try again"', async () => {
+    const { bookingId, driver } = await booked(1);
+    const spy = vi.spyOn(db, '$transaction').mockRejectedValue(conflict());
+    expect(await transition(bookingId, 'ACCEPT', driver)).toEqual({
+      ok: false,
+      code: 'INVALID_STATE',
+      message: 'Please try again',
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('real deadlock: cancel b1 vs. same passenger re-requesting → no uncaught error, seats consistent', async () => {
+    // Reproduce the interleaving deterministically with a hand-driven transaction standing in for cancel:
+    // it updates the booking (Booking lock + partial-unique entry being deleted) and, once requestBooking
+    // has taken the Trip lock and is blocked on the unique index, updates the Trip → 40P01.
+    const { trip, passenger, bookingId } = await booked(1);
+    let reqPromise!: ReturnType<typeof requestBooking>;
+    const manual = db
+      .$transaction(
+        async (tx) => {
+          await tx.$executeRaw`UPDATE "Booking" SET "status" = 'CANCELLED' WHERE "id" = ${bookingId}`;
+          reqPromise = requestBooking(passenger.id, trip.id, 1);
+          await new Promise((r) => setTimeout(r, 300));
+          await tx.$executeRaw`UPDATE "Trip" SET "seatsAvailable" = "seatsAvailable" + 1 WHERE "id" = ${trip.id}`;
+        },
+        { timeout: 15_000 },
+      )
+      .then(
+        () => 'committed' as const,
+        () => 'aborted' as const,
+      );
+    const manualOutcome = await manual;
+    const res = await reqPromise;
+    // Whichever side Postgres picked as the victim, requestBooking returns a Result rather than throwing.
+    if (manualOutcome === 'committed') {
+      expect(res.ok).toBe(true);
+      expect(await seatsLeft(trip.id)).toBe(2);
+    } else {
+      expect(res).toMatchObject({ ok: false, code: 'INVALID_STATE' });
+      expect(await seatsLeft(trip.id)).toBe(2);
+    }
   });
 });
 
