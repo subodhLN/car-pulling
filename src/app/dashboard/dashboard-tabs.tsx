@@ -8,6 +8,7 @@ const TABS = [
   { href: '/dashboard/trips', label: 'My trips' },
   { href: '/dashboard/bookings', label: 'My bookings' },
   { href: '/dashboard/vehicles', label: 'Cars' },
+  { href: '/dashboard/profile', label: 'Profile' },
 ];
 
 export function DashboardTabs() {

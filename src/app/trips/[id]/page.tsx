@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BookingFlash } from '@/components/bookings/booking-actions';
 import { RouteMap } from '@/components/map/route-map';
+import { Rating } from '@/components/reviews/rating';
 import { TripActions } from '@/components/trips/trip-actions';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -71,13 +73,23 @@ export default async function TripPage({ params }: Props) {
         <Card className="flex items-center gap-4">
           <Avatar name={driverName} image={trip.driver.image} size={56} />
           <div>
-            <p className="font-bold">{driverName}</p>
+            <p className="font-bold">
+              <Link href={`/users/${trip.driver.id}`} className="hover:underline">
+                {driverName}
+              </Link>
+            </p>
             <p className="text-sm text-muted">
-              {trip.driver.ratingCount === 0 ? 'New' : `★ ${trip.driver.ratingAvg.toFixed(1)} (${trip.driver.ratingCount})`}
+              <Rating avg={Number(trip.driver.ratingAvg)} count={trip.driver.ratingCount} />
             </p>
             <p className="mt-1 text-sm">
               {trip.vehicle.make} {trip.vehicle.model} · {trip.vehicle.color}
             </p>
+            <Link
+              href={`/users/${trip.driver.id}`}
+              className="mt-2 inline-block text-sm font-semibold underline underline-offset-2"
+            >
+              View profile
+            </Link>
           </div>
         </Card>
         <Card>

@@ -2,18 +2,23 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { Avatar } from '@/components/ui/avatar';
 import { ButtonLink } from '@/components/ui/button';
+import { db } from '@/lib/db';
 import { SignOutButton } from './signout-button';
 
 const MENU = [
   { href: '/dashboard/trips', label: 'My trips' },
   { href: '/dashboard/bookings', label: 'My bookings' },
   { href: '/dashboard/vehicles', label: 'Cars' },
+  { href: '/dashboard/profile', label: 'Profile' },
 ] as const;
 
 /** Right-hand side of the header: login links when signed out, an account menu when signed in. */
 export async function AuthArea() {
   const session = await auth();
-  const user = session?.user;
+  // Name and photo come from the database, not the JWT, so profile edits show up without signing in again.
+  const user = session?.user?.id
+    ? await db.user.findUnique({ where: { id: session.user.id }, select: { name: true, email: true, image: true } })
+    : null;
 
   if (!user) {
     return (

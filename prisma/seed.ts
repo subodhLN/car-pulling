@@ -21,6 +21,7 @@ import { requestBooking, transition } from '@/modules/bookings/service';
 import { ROUTE_CITIES, type Place } from '@/modules/geo/cities';
 import { haversineKm, primeRoute } from '@/modules/geo/service';
 import type { RouteInfo } from '@/modules/geo/types';
+import { postReview } from '@/modules/reviews/service';
 import { publishTrip } from '@/modules/trips/service';
 import { CORRIDORS } from './seed-corridors';
 import { createVehicle } from '@/modules/vehicles/service';
@@ -82,6 +83,33 @@ const NOTES = [
   'No smoking please.',
 ];
 const NOTE_PROB = 0.35;
+const BIOS = [
+  'Software engineer in Gurugram, visiting family on weekends.',
+  'Love long drives and old Hindi songs.',
+  'Student in Chandigarh. Usually travel light.',
+  'Frequent Jaipur–Delhi commuter. Quiet rides preferred.',
+  'Weekend trekker heading to the hills whenever I can.',
+];
+// Star ratings weighted 5:55%, 4:30%, 3:10%, 2:4%, 1:1%.
+const RATING_WEIGHTS: [number, number][] = [[5, 0.55], [4, 0.3], [3, 0.1], [2, 0.04], [1, 0.01]];
+const REVIEW_PROB = 0.7;
+const COMMENTS: Record<'DRIVER' | 'PASSENGER', string[]> = {
+  DRIVER: [
+    'Very smooth drive, reached well on time.',
+    'Safe driver and a clean car. Will book again.',
+    'Good conversation, the chai stop was a nice touch.',
+    'Picked me up right at the metro gate. Hassle-free.',
+    'Comfortable ride, AC was working perfectly.',
+    'Bit of traffic near the toll but managed well.',
+  ],
+  PASSENGER: [
+    'Was on time at the pickup point. Pleasant co-traveller.',
+    'Polite and friendly, great company on the highway.',
+    'Travelled light and was ready on time.',
+    'Nice person, happy to ride together again.',
+  ],
+};
+
 // IST departure hours.
 const HOURS = [5, 6, 7, 8, 9, 13, 16, 17, 18, 20];
 
@@ -134,13 +162,26 @@ async function createUsers(): Promise<{ driver: Person; passenger: Person; admin
       }
     }
   };
-  async function make(name: string, email: string, role?: 'ADMIN'): Promise<Person> {
+  async function make(
+    name: string,
+    email: string,
+    role?: 'ADMIN',
+    profile?: { bio: string; idVerified: boolean },
+  ): Promise<Person> {
     const res = await signUp({ name, email, password: DEMO_PASSWORD, phone: phone() });
     const { id } = must(res, `signUp ${email}`);
-    if (role) await db.user.update({ where: { id }, data: { role } });
+    // Seeded accounts count as email-verified; some have ID checks and a bio so profiles look lived-in.
+    const bio = profile?.bio ?? (chance(0.5) ? pick(BIOS) : undefined);
+    await db.user.update({
+      where: { id },
+      data: { role, emailVerified: new Date(), idVerified: profile?.idVerified ?? chance(0.4), bio },
+    });
     return { id, name, email };
   }
-  const driver = await make('Rohan Mehta', 'driver@demo.test');
+  const driver = await make('Rohan Mehta', 'driver@demo.test', undefined, {
+    bio: 'Drive Delhi to the hills most weekends. Punctual, AC always on, happy to stop for chai.',
+    idVerified: true,
+  });
   const passenger = await make('Ananya Sharma', 'passenger@demo.test');
   const admin = await make('Admin Kapoor', 'admin@demo.test', 'ADMIN');
 
@@ -244,14 +285,16 @@ async function main() {
 
   // ---- past trips (direct insert, COMPLETED) with COMPLETED/CANCELLED/REJECTED bookings -----------------
   const PAST_TRIPS = 30;
+  const completedRides: { tripId: string; driverId: string; passengerId: string; arrival: Date; always: boolean }[] = [];
   for (let i = 0; i < PAST_TRIPS; i++) {
-    // The first three belong to the demo driver; the demo passenger rides on the first few.
-    const d = i < 3 ? demoDriver : pick(drivers);
+    // The first six belong to the demo driver; the demo passenger rides on the first few.
+    const d = i < 6 ? demoDriver : pick(drivers);
     const [a, b] = pick(CORRIDORS);
     const [fromSlug, toSlug] = chance(0.5) ? [a, b] : [b, a];
     const from = city(fromSlug);
     const to = city(toSlug);
-    const departureAt = istInstant(-int(2, 45), pick(HOURS), pick([0, 15, 30, 45]));
+    // Trip 0 is two days ago, inside the 14-day review window, so the demo passenger has a ride to rate.
+    const departureAt = istInstant(i === 0 ? -2 : -int(2, 45), pick(HOURS), pick([0, 15, 30, 45]));
     const seatsTotal = int(2, d.seats);
     const pricePerSeat = fare(from, to);
 
@@ -275,11 +318,46 @@ async function main() {
       pricePerSeat,
     });
     stats.pastTrips++;
+    const durationMin = seedRoute(from, to)?.durationMin ?? 360;
     for (const x of planned) {
       await insertPastBooking({ tripId, passengerId: x.p.id, seats: x.seats, pricePerSeat, status: x.status, departureAt });
       count(x.status);
+      if (x.status === 'COMPLETED') {
+        completedRides.push({
+          tripId,
+          driverId: d.person.id,
+          passengerId: x.p.id,
+          arrival: new Date(departureAt.getTime() + durationMin * 60_000),
+          always: d === demoDriver,
+        });
+      }
     }
   }
+
+  // ---- reviews through postReview (posted a day after arrival) so rating aggregates are real ------------
+  function rating(): number {
+    let r = rand();
+    for (const [stars, w] of RATING_WEIGHTS) if ((r -= w) < 0) return stars;
+    return 5;
+  }
+  let reviews = 0;
+  for (const ride of completedRides) {
+    const now = new Date(ride.arrival.getTime() + DAY_MS);
+    // The demo passenger leaves trip 0 unreviewed so the dashboard has a "Rate …" form to try.
+    const unrated = ride.tripId === completedRides[0]?.tripId && ride.passengerId === passenger.id;
+    const pairs = [
+      { author: ride.passengerId, subject: ride.driverId, role: 'DRIVER' as const, skip: unrated },
+      { author: ride.driverId, subject: ride.passengerId, role: 'PASSENGER' as const, skip: false },
+    ];
+    for (const r of pairs) {
+      if (r.skip || !(ride.always || chance(REVIEW_PROB))) continue;
+      const comment = chance(0.75) ? pick(COMMENTS[r.role]) : undefined;
+      must(await postReview(r.author, { tripId: ride.tripId, subjectId: r.subject, rating: rating(), comment }, now), 'review');
+      reviews++;
+    }
+  }
+  const demoDriverReviews = await db.review.count({ where: { subjectId: driver.id } });
+  if (demoDriverReviews < 5) throw new Error(`demo driver has only ${demoDriverReviews} reviews (want >= 5)`);
 
   // ---- future trips via publishTrip (>= 3h ahead; days 1-14 IST at 05:00+ is always >= 5h) ----------------
   type Future = { id: string; driverId: string; seats: number };
@@ -366,6 +444,7 @@ async function main() {
   console.log(`  vehicles: ${stats.vehicles}`);
   console.log(`  trips: ${stats.pastTrips + stats.futureTrips} (${stats.pastTrips} past, ${stats.futureTrips} upcoming)`);
   console.log(`  bookings: ${JSON.stringify(stats.bookings)}`);
+  console.log(`  reviews: ${reviews}`);
 }
 
 main()
