@@ -76,6 +76,11 @@ export async function publishTrip(
   return ok({ id });
 }
 
+/** The plain Trip row (no points or relations), or null. */
+export async function findTripRow(id: string): Promise<Trip | null> {
+  return db.trip.findUnique({ where: { id } });
+}
+
 type PointRow = { oLat: number; oLng: number; dLat: number; dLng: number };
 
 export async function getTrip(id: string): Promise<TripView | null> {

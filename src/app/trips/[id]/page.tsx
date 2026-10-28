@@ -71,7 +71,7 @@ export default async function TripPage({ params }: Props) {
             {formatInr(trip.pricePerSeat)} <span className="text-base font-semibold text-muted">per seat</span>
           </p>
           <p className="mt-2 font-semibold">{seatsLeft}</p>
-          <TripActions tripId={trip.id} />
+          <TripActions trip={trip} now={new Date()} />
         </Card>
       </div>
 

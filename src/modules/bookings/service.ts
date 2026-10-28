@@ -272,9 +272,22 @@ export async function actorFor(bookingId: string, user: { id: string; role: 'USE
   return { userId: user.id, kind: 'PASSENGER' };
 }
 
-/** A passenger's bookings with a trip summary, newest first. */
+const PHONE_VISIBLE: ReadonlySet<BookingStatus> = new Set(['ACCEPTED', 'COMPLETED']);
+
+/** Phone numbers are revealed between driver and passenger only while ACCEPTED or COMPLETED (spec §5.3 rule 5). */
+function visiblePhone(status: BookingStatus, phone: string | null): string | null {
+  return PHONE_VISIBLE.has(status) ? phone : null;
+}
+
+/** Statuses a booking can still move out of; at most one per passenger per trip. */
+const OPEN: BookingStatus[] = ['PENDING_PAYMENT', 'REQUESTED', 'ACCEPTED'];
+
+/**
+ * A passenger's bookings with a trip summary, newest first. The driver's phone is present only while
+ * the booking is ACCEPTED or COMPLETED.
+ */
 export async function listPassengerBookings(passengerId: string) {
-  return db.booking.findMany({
+  const rows = await db.booking.findMany({
     where: { passengerId },
     orderBy: { createdAt: 'desc' },
     include: {
@@ -286,37 +299,88 @@ export async function listPassengerBookings(passengerId: string) {
           departureAt: true,
           pricePerSeat: true,
           status: true,
-          driver: { select: { id: true, name: true, image: true } },
+          driver: { select: { id: true, name: true, image: true, phone: true } },
         },
-      },
-    },
-  });
-}
-export type PassengerBooking = Awaited<ReturnType<typeof listPassengerBookings>>[number];
-
-const PHONE_VISIBLE: ReadonlySet<BookingStatus> = new Set(['ACCEPTED', 'COMPLETED']);
-
-/**
- * A trip's bookings with a passenger summary, newest first. Never includes email; the phone number is
- * only present while the booking is ACCEPTED or COMPLETED (spec §5.3 rule 5).
- */
-export async function listTripBookings(tripId: string) {
-  const rows = await db.booking.findMany({
-    where: { tripId },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      passenger: {
-        select: { id: true, name: true, image: true, ratingAvg: true, ratingCount: true, phone: true },
       },
     },
   });
   return rows.map((b) => ({
     ...b,
+    trip: { ...b.trip, driver: { ...b.trip.driver, phone: visiblePhone(b.status, b.trip.driver.phone) } },
+  }));
+}
+export type PassengerBooking = Awaited<ReturnType<typeof listPassengerBookings>>[number];
+
+/** The passenger's open booking on a trip (for the trip page), with the driver's phone once accepted. */
+export async function findActiveBooking(passengerId: string, tripId: string) {
+  const b = await db.booking.findFirst({
+    where: { passengerId, tripId, status: { in: OPEN } },
+    select: {
+      id: true,
+      seats: true,
+      amount: true,
+      status: true,
+      trip: { select: { driver: { select: { phone: true } } } },
+    },
+  });
+  if (!b) return null;
+  const { trip, ...rest } = b;
+  return { ...rest, driverPhone: visiblePhone(b.status, trip.driver.phone) };
+}
+export type ActiveBooking = NonNullable<Awaited<ReturnType<typeof findActiveBooking>>>;
+
+const PASSENGER_SUMMARY = {
+  select: { id: true, name: true, image: true, ratingAvg: true, ratingCount: true, phone: true },
+} as const;
+
+function maskPassenger<
+  B extends { status: BookingStatus; passenger: { ratingAvg: Prisma.Decimal; phone: string | null } },
+>(b: B) {
+  return {
+    ...b,
     passenger: {
       ...b.passenger,
       ratingAvg: Number(b.passenger.ratingAvg),
-      phone: PHONE_VISIBLE.has(b.status) ? b.passenger.phone : null,
+      phone: visiblePhone(b.status, b.passenger.phone),
     },
-  }));
+  };
+}
+
+/**
+ * A trip's bookings with a passenger summary, newest first. Never includes email; the phone number is
+ * only present while the booking is ACCEPTED or COMPLETED (spec §5.3 rule 5). No authorization here:
+ * callers must pass requireTripDriver (or be an admin) first.
+ */
+export async function listTripBookings(tripId: string) {
+  const rows = await db.booking.findMany({
+    where: { tripId },
+    orderBy: { createdAt: 'desc' },
+    include: { passenger: PASSENGER_SUMMARY },
+  });
+  return rows.map(maskPassenger);
 }
 export type TripBooking = Awaited<ReturnType<typeof listTripBookings>>[number];
+
+/**
+ * The driver dashboard: the driver's own trips (soonest departure first) with each trip's bookings and
+ * masked passenger summaries. Scoped by driverId in the query, so it needs no further authorization.
+ */
+export async function listDriverTrips(driverId: string) {
+  const trips = await db.trip.findMany({
+    where: { driverId },
+    orderBy: { departureAt: 'asc' },
+    select: {
+      id: true,
+      originLabel: true,
+      destLabel: true,
+      departureAt: true,
+      seatsTotal: true,
+      seatsAvailable: true,
+      pricePerSeat: true,
+      status: true,
+      bookings: { orderBy: { createdAt: 'desc' }, include: { passenger: PASSENGER_SUMMARY } },
+    },
+  });
+  return trips.map((t) => ({ ...t, bookings: t.bookings.map(maskPassenger) }));
+}
+export type DriverTrip = Awaited<ReturnType<typeof listDriverTrips>>[number];

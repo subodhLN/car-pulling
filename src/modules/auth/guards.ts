@@ -1,7 +1,9 @@
+import type { Trip } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { AppError } from '@/lib/errors';
+import { findTripRow } from '@/modules/trips/service';
 
 export type SessionUser = { id: string; name: string; email: string; role: 'USER' | 'ADMIN' };
 
@@ -26,4 +28,26 @@ export async function requirePageUser(nextPath: string): Promise<SessionUser> {
     }
     throw e;
   }
+}
+
+/** The signed-in, active user, or null (signed out or suspended) — for pages that render for everyone. */
+export async function optionalUser(): Promise<SessionUser | null> {
+  try {
+    return await requireUser();
+  } catch (e) {
+    if (e instanceof AppError) return null;
+    throw e;
+  }
+}
+
+/**
+ * The signed-in user, who must be the trip's driver. Callers of listTripBookings and trip-management
+ * actions must pass this first. Throws UNAUTHENTICATED, NOT_FOUND or NOT_ALLOWED.
+ */
+export async function requireTripDriver(tripId: string): Promise<{ user: SessionUser; trip: Trip }> {
+  const user = await requireUser();
+  const trip = await findTripRow(tripId);
+  if (!trip) throw new AppError('NOT_FOUND', 'Trip not found');
+  if (trip.driverId !== user.id) throw new AppError('NOT_ALLOWED', 'Only the driver can manage this trip');
+  return { user, trip };
 }

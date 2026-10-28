@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 import { err } from '@/lib/result';
 import {
   actorFor,
+  findActiveBooking,
+  listDriverTrips,
   listPassengerBookings,
   listTripBookings,
   requestBooking,
@@ -487,5 +489,59 @@ describe('queries', () => {
     expect(list[0].passenger).toMatchObject({ phone: null, ratingAvg: 0, ratingCount: 0 });
     expect(list[1].passenger).toMatchObject({ phone: '+919812345678' });
     expect(list[1].passenger).not.toHaveProperty('email');
+  });
+});
+
+describe('dashboard reads', () => {
+  it('listPassengerBookings reveals the driver phone only for ACCEPTED/COMPLETED', async () => {
+    const driver = await createUser({ phone: '+919811111111' });
+    const p = await createUser();
+    const t1 = await createTrip({ driverId: driver.id });
+    const t2 = await createTrip({ driverId: driver.id });
+    const r1 = await requestBooking(p.id, t1.id, 1);
+    await requestBooking(p.id, t2.id, 1);
+    if (!r1.ok) throw new Error('setup');
+    await transition(r1.data.bookingId, 'ACCEPT', { userId: driver.id, kind: 'DRIVER' });
+
+    const list = await listPassengerBookings(p.id);
+    const byTrip = new Map(list.map((b) => [b.trip.id, b]));
+    expect(byTrip.get(t1.id)?.trip.driver.phone).toBe('+919811111111');
+    expect(byTrip.get(t2.id)?.trip.driver.phone).toBeNull();
+    expect(byTrip.get(t1.id)?.trip.driver).not.toHaveProperty('email');
+  });
+
+  it('findActiveBooking returns the open booking (with driver phone once accepted) or null', async () => {
+    const driver = await createUser({ phone: '+919811111111' });
+    const trip = await createTrip({ driverId: driver.id });
+    const p = await createUser();
+    expect(await findActiveBooking(p.id, trip.id)).toBeNull();
+    const r = await requestBooking(p.id, trip.id, 2);
+    if (!r.ok) throw new Error('setup');
+    expect(await findActiveBooking(p.id, trip.id)).toMatchObject({ id: r.data.bookingId, seats: 2, status: 'REQUESTED', driverPhone: null });
+    await transition(r.data.bookingId, 'ACCEPT', { userId: driver.id, kind: 'DRIVER' });
+    expect(await findActiveBooking(p.id, trip.id)).toMatchObject({ status: 'ACCEPTED', driverPhone: '+919811111111' });
+    await transition(r.data.bookingId, 'CANCEL', { userId: p.id, kind: 'PASSENGER' });
+    expect(await findActiveBooking(p.id, trip.id)).toBeNull();
+  });
+
+  it("listDriverTrips returns only the driver's trips with masked passenger summaries", async () => {
+    const trip = await createTrip();
+    const other = await createTrip();
+    const a = await createUser({ name: 'Ravi', phone: '+919812345678' });
+    const b = await createUser({ name: 'Meera', phone: '+919876543210' });
+    const ra = await requestBooking(a.id, trip.id, 1);
+    await requestBooking(b.id, trip.id, 1);
+    await requestBooking(a.id, other.id, 1);
+    if (!ra.ok) throw new Error('setup');
+    await transition(ra.data.bookingId, 'ACCEPT', { userId: trip.driverId, kind: 'DRIVER' });
+
+    const trips = await listDriverTrips(trip.driverId);
+    expect(trips.map((t) => t.id)).toEqual([trip.id]);
+    const [t] = trips;
+    expect(t).toMatchObject({ originLabel: 'Delhi', destLabel: 'Jaipur', seatsAvailable: 1 });
+    const byName = new Map(t.bookings.map((x) => [x.passenger.name, x]));
+    expect(byName.get('Ravi')?.passenger).toMatchObject({ phone: '+919812345678', ratingAvg: 0 });
+    expect(byName.get('Meera')?.passenger.phone).toBeNull();
+    expect(byName.get('Meera')?.passenger).not.toHaveProperty('email');
   });
 });

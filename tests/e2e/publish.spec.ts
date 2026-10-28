@@ -1,12 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, signUp, test, uniqueEmail } from './helpers';
 
 test('publish a trip with keyboard-driven city pickers', async ({ page }) => {
-  await page.goto('/signup');
-  await page.getByLabel('Full name').fill('Meera Iyer');
-  await page.getByLabel('Email').fill(`pub-${Date.now()}@example.com`);
-  await page.getByLabel('Password').fill('longenough1');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page).toHaveURL('/');
+  await signUp(page, { name: 'Meera Iyer', email: uniqueEmail('pub'), password: 'longenough1' });
 
   // No car yet: the form is replaced by a pointer to the cars page.
   await page.goto('/trips/new');

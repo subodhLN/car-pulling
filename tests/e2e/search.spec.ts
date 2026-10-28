@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, newUserContext, signUp, test, uniqueEmail } from './helpers';
 
 const istDate = (daysOut: number) =>
   new Date(Date.now() + daysOut * 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -7,12 +7,7 @@ const driverName = `Searchable ${Date.now()}`; // unique: the dev database accum
 
 test('search finds a published ride; filters keep it; an empty day shows the empty state', async ({ page, browser }) => {
   // A driver signs up, adds a car and publishes Delhi → Jaipur three days out.
-  await page.goto('/signup');
-  await page.getByLabel('Full name').fill(driverName);
-  await page.getByLabel('Email').fill(`search-${Date.now()}@example.com`);
-  await page.getByLabel('Password').fill('longenough1');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page).toHaveURL('/');
+  await signUp(page, { name: driverName, email: uniqueEmail('search'), password: 'longenough1' });
 
   await page.goto('/dashboard/vehicles');
   await page.getByLabel('Make').fill('Maruti');
@@ -42,8 +37,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await expect(page).toHaveURL(/\/trips\/[^/]+$/);
 
   // A fresh visitor (no session) searches.
-  const ctx = await browser.newContext();
-  const visitor = await ctx.newPage();
+  const { context: ctx, page: visitor } = await newUserContext(browser);
   await visitor.goto(`/search?from=delhi&to=jaipur&date=${date}`);
   await expect(visitor.getByRole('heading', { level: 1 })).toContainText('Delhi to Jaipur,');
   await expect(visitor.getByText('rides · sorted by departure').or(visitor.getByText('ride · sorted by departure'))).toBeVisible();

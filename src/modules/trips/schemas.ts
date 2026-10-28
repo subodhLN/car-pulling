@@ -35,3 +35,5 @@ export const publishFormSchema = z
       notes: v.notes,
     };
   });
+
+export const tripIdSchema = z.object({ tripId: z.string().min(1, 'Trip not found') });
