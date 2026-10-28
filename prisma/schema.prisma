@@ -62,6 +62,8 @@ model User {
   vehicles Vehicle[]
   trips    Trip[]    @relation("DriverTrips")
   bookings Booking[]
+  reviewsWritten  Review[] @relation("ReviewAuthor")
+  reviewsReceived Review[] @relation("ReviewSubject")
 }
 
 model Account {
@@ -143,6 +145,7 @@ model Trip {
 
   @@index([driverId])
   @@index([status, departureAt], map: "trip_status_departure_idx")
+  reviews  Review[]
 }
 
 model Booking {
@@ -179,4 +182,22 @@ model GeoCache {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+/// One review per (trip, author, subject); author and subject are the driver and a passenger of a COMPLETED booking.
+model Review {
+  id        String   @id @default(cuid())
+  tripId    String
+  authorId  String
+  subjectId String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  trip    Trip @relation(fields: [tripId], references: [id])
+  author  User @relation("ReviewAuthor", fields: [authorId], references: [id])
+  subject User @relation("ReviewSubject", fields: [subjectId], references: [id])
+
+  @@unique([tripId, authorId, subjectId])
+  @@index([subjectId, createdAt])
 }
