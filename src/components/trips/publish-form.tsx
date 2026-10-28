@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { publishFormSchema } from '@/modules/trips/schemas';
 import { publishTripAction } from '@/modules/trips/actions';
+import { RouteMap } from '@/components/map/route-map';
+import type { Place } from '@/modules/geo/types';
 import { CityPicker } from './city-picker';
+
+// MapLibre is browser-only; load the dialog (and the map library) on demand.
+const PickOnMapDialog = dynamic(() => import('@/components/map/pick-on-map-dialog').then((m) => m.PickOnMapDialog), {
+  ssr: false,
+});
 
 export type CarOption = { id: string; make: string; model: string; color: string; seats: number };
 type Field = 'origin' | 'dest' | 'date' | 'time' | 'vehicleId' | 'seats' | 'price' | 'notes';
@@ -43,6 +51,10 @@ export function PublishForm({ cars, minDate }: { cars: CarOption[]; minDate: str
   const [carId, setCarId] = useState(cars[0].id);
   const [pending, start] = useTransition();
   const car = cars.find((c) => c.id === carId) ?? cars[0];
+  const [places, setPlaces] = useState<{ origin: Place | null; dest: Place | null }>({ origin: null, dest: null });
+  // Bumped when a place comes from the map, so the picker remounts showing it.
+  const [pickerKeys, setPickerKeys] = useState({ origin: 0, dest: 0 });
+  const [mapFor, setMapFor] = useState<'origin' | 'dest' | null>(null);
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -87,11 +99,39 @@ export function PublishForm({ cars, minDate }: { cars: CarOption[]; minDate: str
       ) : null}
       <div className="grid gap-5 sm:grid-cols-2">
         <Row id="origin" label="From" error={errors.origin}>
-          <CityPicker id="origin" name="origin" placeholder="Leaving from" {...a11y('origin')} />
+          <CityPicker
+            key={pickerKeys.origin}
+            id="origin"
+            name="origin"
+            placeholder="Leaving from"
+            defaultPlace={places.origin}
+            onChange={(p) => setPlaces((cur) => ({ ...cur, origin: p }))}
+            allowMapPick
+            onMapPick={() => setMapFor('origin')}
+            {...a11y('origin')}
+          />
         </Row>
         <Row id="dest" label="To" error={errors.dest}>
-          <CityPicker id="dest" name="dest" placeholder="Going to" {...a11y('dest')} />
+          <CityPicker
+            key={pickerKeys.dest}
+            id="dest"
+            name="dest"
+            placeholder="Going to"
+            defaultPlace={places.dest}
+            onChange={(p) => setPlaces((cur) => ({ ...cur, dest: p }))}
+            allowMapPick
+            onMapPick={() => setMapFor('dest')}
+            {...a11y('dest')}
+          />
         </Row>
+        {places.origin && places.dest ? (
+          <RouteMap
+            className="h-56 sm:col-span-2"
+            origin={places.origin}
+            dest={places.dest}
+            polyline={null}
+          />
+        ) : null}
         <Row id="date" label="Date" error={errors.date}>
           <Input id="date" name="date" type="date" min={minDate} {...inv('date')} />
         </Row>
@@ -135,6 +175,19 @@ export function PublishForm({ cars, minDate }: { cars: CarOption[]; minDate: str
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? 'Publishing…' : 'Publish trip'}
       </Button>
+      <PickOnMapDialog
+        key={mapFor ?? 'closed'}
+        open={mapFor !== null}
+        initial={mapFor ? places[mapFor] : null}
+        onClose={() => setMapFor(null)}
+        onPick={(p) => {
+          const field = mapFor!;
+          const place = { label: p.label, lat: p.lat, lng: p.lng };
+          setPlaces((cur) => ({ ...cur, [field]: place }));
+          setPickerKeys((k) => ({ ...k, [field]: k[field] + 1 }));
+          setMapFor(null);
+        }}
+      />
     </form>
   );
 }

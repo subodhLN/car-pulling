@@ -3,6 +3,7 @@ import type { Trip, UserStatus, Vehicle } from '@prisma/client';
 import { db } from '@/lib/db';
 import { err, ok, type Result } from '@/lib/result';
 import type { Place } from '@/modules/geo/cities';
+import { placeSchema } from '@/modules/geo/bounds';
 import { haversineKm, route } from '@/modules/geo/service';
 
 export type PublishTripInput = {
@@ -46,6 +47,10 @@ export async function publishTrip(
   }
   if (!Number.isInteger(input.pricePerSeat) || input.pricePerSeat < MIN_PRICE || input.pricePerSeat > MAX_PRICE) {
     return err('VALIDATION', 'Price per seat must be between ₹50 and ₹5,000');
+  }
+  for (const place of [input.origin, input.dest]) {
+    const checked = placeSchema.safeParse(place);
+    if (!checked.success) return err('VALIDATION', checked.error.issues[0]?.message ?? 'Choose a place in India');
   }
   if (input.origin.lat === input.dest.lat && input.origin.lng === input.dest.lng) {
     return err('VALIDATION', 'Pick different start and end points');

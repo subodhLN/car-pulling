@@ -14,7 +14,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:drift": "tsx scripts/check-drift.ts"
+    "db:drift": "tsx scripts/check-drift.ts",
+    "routes:backfill": "tsx scripts/backfill-routes.ts"
   },
   "dependencies": {
     "@auth/core": "0.41.3",

@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db';
 import type { Place } from '@/modules/geo/cities';
+import { getProvider } from '@/modules/geo/providers';
 import { route } from '@/modules/geo/service';
 import { getTrip, publishTrip } from '@/modules/trips/service';
 import { resetDb } from '../../helpers/db';
 import { createUser, createVehicle } from '../../helpers/factories';
 
 beforeEach(resetDb);
+afterEach(() => vi.restoreAllMocks());
 
 const HOUR = 60 * 60 * 1000;
 const now = new Date('2026-11-01T06:00:00Z');
@@ -116,5 +118,20 @@ describe('publishTrip', () => {
 
   it('getTrip returns null for an unknown id', async () => {
     expect(await getTrip('nope')).toBeNull();
+  });
+
+  it('rejects places outside India', async () => {
+    const { driver, input } = await setup();
+    const res = await publishTrip(driver.id, { ...input, dest: { label: 'London', lat: 51.5, lng: -0.1 } }, now);
+    expect(res).toEqual({ ok: false, code: 'VALIDATION', message: 'Choose a place in India' });
+  });
+
+  it('still publishes, without a route, when routing fails', async () => {
+    vi.spyOn(getProvider(), 'route').mockRejectedValue(new Error('OSRM down'));
+    const { driver, input } = await setup();
+    const res = await publishTrip(driver.id, { ...input, dest: { label: 'Agra', lat: 27.1767, lng: 78.0081 } }, now);
+    expect(res.ok).toBe(true);
+    const row = await db.trip.findUniqueOrThrow({ where: { id: res.ok ? res.data.id : '' } });
+    expect(row).toMatchObject({ routePolyline: null, distanceKm: null, durationMin: null });
   });
 });

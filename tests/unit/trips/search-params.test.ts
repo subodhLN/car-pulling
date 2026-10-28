@@ -26,6 +26,10 @@ describe('parseSearchParams', () => {
     expect(r.query?.date).toBe('2026-12-05');
   });
 
+  it('rejects coordinates outside India', () => {
+    expect(parseSearchParams({ from: '51.5,-0.1', to: 'jaipur' }, NOW).query).toBeNull();
+  });
+
   it('uses a generic label for coordinates without a label param, and ignores labels for slugs', () => {
     const r = parseSearchParams({ from: '28.5,77.1', to: 'jaipur', toLabel: 'Hacked' }, NOW);
     expect(r.fromLabel).toBe('Chosen location');

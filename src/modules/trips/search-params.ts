@@ -1,3 +1,4 @@
+import { inIndia } from '@/modules/geo/bounds';
 import { z } from 'zod';
 import { TZ } from '@/lib/time';
 import { TZDate } from '@date-fns/tz';
@@ -57,7 +58,7 @@ function resolvePlace(raw: string | undefined, label: string | undefined): { poi
   const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(raw);
   if (!m) return null;
   const parsed = latLng.safeParse({ lat: Number(m[1]), lng: Number(m[2]) });
-  if (!parsed.success) return null;
+  if (!parsed.success || !inIndia(parsed.data)) return null;
   return { point: parsed.data, label: label?.trim().slice(0, 80) || 'Chosen location' };
 }
 
