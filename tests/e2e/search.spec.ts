@@ -3,10 +3,14 @@ import { expect, newUserContext, signUp, test, uniqueEmail } from './helpers';
 const istDate = (daysOut: number) =>
   new Date(Date.now() + daysOut * 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+// The dev database accumulates Delhi → Jaipur trips (and the seed adds more), and results are capped at 20 per
+// page, so publish on a random quiet day at a random early-morning minute to stay on page 1.
+const daysOut = 4 + Math.floor(Math.random() * 10);
+const departureTime = `0${Math.floor(Math.random() * 6)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
 const driverName = `Searchable ${Date.now()}`; // unique: the dev database accumulates trips across runs
 
 test('search finds a published ride; filters keep it; an empty day shows the empty state', async ({ page, browser }) => {
-  // A driver signs up, adds a car and publishes Delhi → Jaipur three days out.
+  // A driver signs up, adds a car and publishes Delhi → Jaipur a few days out.
   await signUp(page, { name: driverName, email: uniqueEmail('search'), password: 'longenough1' });
 
   await page.goto('/dashboard/vehicles');
@@ -28,9 +32,9 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await expect(page.getByRole('option').first()).toBeVisible();
   await to.press('ArrowDown');
   await to.press('Enter');
-  const date = istDate(3);
+  const date = istDate(daysOut);
   await page.getByLabel('Date').fill(date);
-  await page.getByLabel('Departure time (IST)').fill('09:00');
+  await page.getByLabel('Departure time (IST)').fill(departureTime);
   await page.getByLabel('Seats offered').selectOption('1');
   await page.getByLabel('Price per seat (₹)').fill('450');
   await page.getByRole('button', { name: 'Publish trip' }).click();
@@ -45,7 +49,7 @@ test('search finds a published ride; filters keep it; an empty day shows the emp
   await expect(row).toBeVisible();
   await expect(row).toContainText('₹450');
   await expect(row).toContainText('1 seat left');
-  await expect(row).toContainText('09:00');
+  await expect(row).toContainText(departureTime);
 
   await visitor.getByLabel('Radius').selectOption('25');
   await expect(visitor).toHaveURL(/radius=25/);

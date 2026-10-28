@@ -1,37 +1,4 @@
-import type { Page } from '@playwright/test';
-import { expect, newUserContext, signUp, test, uniqueEmail } from './helpers';
-
-const istDate = (daysOut: number) =>
-  new Date(Date.now() + daysOut * 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-async function publishTrip(page: Page): Promise<string> {
-  await page.goto('/dashboard/vehicles');
-  await page.getByLabel('Make').fill('Maruti');
-  await page.getByLabel('Model').fill('Ertiga');
-  await page.getByLabel('Colour').fill('White');
-  await page.getByLabel('Passenger seats').selectOption('4');
-  await page.getByRole('button', { name: 'Add car' }).click();
-  await expect(page.getByText('Maruti Ertiga · White · 4 passenger seats')).toBeVisible();
-
-  await page.goto('/trips/new');
-  const from = page.getByRole('combobox', { name: 'From' });
-  await from.pressSequentially('Delh');
-  await expect(page.getByRole('option').first()).toBeVisible();
-  await from.press('ArrowDown');
-  await from.press('Enter');
-  const to = page.getByRole('combobox', { name: 'To' });
-  await to.pressSequentially('Jaip');
-  await expect(page.getByRole('option').first()).toBeVisible();
-  await to.press('ArrowDown');
-  await to.press('Enter');
-  await page.getByLabel('Date').fill(istDate(3));
-  await page.getByLabel('Departure time (IST)').fill('09:00');
-  await page.getByLabel('Seats offered').selectOption('2');
-  await page.getByLabel('Price per seat (₹)').fill('450');
-  await page.getByRole('button', { name: 'Publish trip' }).click();
-  await expect(page).toHaveURL(/\/trips\/(?!new$)[^/]+$/);
-  return new URL(page.url()).pathname;
-}
+import { expect, newUserContext, publishTrip, signUp, test, uniqueEmail } from './helpers';
 
 test('request → accept → phone revealed → cancel with refund preview → seats restored', async ({ browser }) => {
   const passengerName = `Pax ${Date.now()}`;
