@@ -26,6 +26,25 @@
   --radius-card: 18px;
 }
 
+/* Motion (spec §9.4): hero photo settles, copy and search fade up. Off under reduced motion (below). */
+@theme {
+  --ease-settle: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-settle: settle 1.8s var(--ease-settle) both;
+  --animate-fade-up: fade-up 0.9s var(--ease-settle) both;
+
+  @keyframes settle {
+    from {
+      transform: scale(1.07);
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;

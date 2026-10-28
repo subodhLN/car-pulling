@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSearchParams } from '@/modules/trips/search-params';
+import { parseSearchParams, searchHref } from '@/modules/trips/search-params';
 
 const NOW = new Date('2026-11-01T19:00:00Z'); // 00:30 IST on 2 Nov
 
@@ -60,5 +60,32 @@ describe('parseSearchParams', () => {
     );
     expect(r.query).toMatchObject({ date: '2026-11-09', seats: 3, radiusKm: 25, sort: 'price', page: 2 });
     expect(r.fromLabel).toBe('Delhi');
+  });
+});
+
+describe('searchHref', () => {
+  it('uses city slugs for CITIES entries, in from/to/date/seats order', () => {
+    const delhi = { label: 'Delhi', lat: 28.6139, lng: 77.209 };
+    const jaipur = { label: 'Jaipur', lat: 26.9124, lng: 75.7873 };
+    expect(searchHref({ from: delhi, to: jaipur, date: '2026-11-02', seats: 2 })).toBe(
+      '/search?from=delhi&to=jaipur&date=2026-11-02&seats=2',
+    );
+    expect(searchHref({ from: delhi, to: jaipur, date: '2026-11-02' })).toBe('/search?from=delhi&to=jaipur&date=2026-11-02');
+  });
+
+  it('falls back to "lat,lng" plus a label for other places, and round-trips through parseSearchParams', () => {
+    const odd = { label: 'Somewhere Nice', lat: 28.5, lng: 77.1 };
+    const href = searchHref({ from: odd, to: { label: 'Jaipur', lat: 26.9124, lng: 75.7873 }, date: '2026-11-03' });
+    expect(href).toBe('/search?from=28.5%2C77.1&fromLabel=Somewhere+Nice&to=jaipur&date=2026-11-03');
+    const params = Object.fromEntries(new URLSearchParams(href.split('?')[1]));
+    const r = parseSearchParams(params, NOW);
+    expect(r.fromLabel).toBe('Somewhere Nice');
+    expect(r.query).toMatchObject({ from: { lat: 28.5, lng: 77.1 }, date: '2026-11-03' });
+  });
+
+  it('accepts a city slug in place of a place', () => {
+    expect(searchHref({ from: 'chandigarh', to: 'shimla', date: '2026-11-07' })).toBe(
+      '/search?from=chandigarh&to=shimla&date=2026-11-07',
+    );
   });
 });

@@ -50,8 +50,8 @@ test.describe('app shell', () => {
       await page.goto('/');
       await page.waitForLoadState('load');
       expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
-      // Hovering a button would start its hover transition; with reduced motion it must not.
-      await page.getByRole('main').getByRole('link', { name: 'Find a ride' }).hover();
+      // Hovering the search button (hover: scale) would start its transition; with reduced motion it must not.
+      await page.getByRole('search', { name: 'Find a ride' }).getByRole('button', { name: 'Search' }).hover();
       expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
     });
   });

@@ -20,3 +20,19 @@ export const CITIES: (Place & { slug: string })[] = [
   { slug: 'sindhi-camp', label: 'Sindhi Camp (Jaipur)', lat: 26.9199, lng: 75.7878 },
   { slug: 'isbt-43-chandigarh', label: 'ISBT Sector 43 (Chandigarh)', lat: 30.7197, lng: 76.7456 },
 ];
+
+/** The ten towns (not pickup areas) that popular routes are grouped by. */
+export const ROUTE_CITY_SLUGS = [
+  'delhi',
+  'gurugram',
+  'noida',
+  'chandigarh',
+  'jaipur',
+  'agra',
+  'amritsar',
+  'dehradun',
+  'shimla',
+  'ludhiana',
+] as const;
+
+export const ROUTE_CITIES = CITIES.filter((c) => (ROUTE_CITY_SLUGS as readonly string[]).includes(c.slug));

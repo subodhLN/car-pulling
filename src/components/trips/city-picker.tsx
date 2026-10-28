@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { Input } from '@/components/ui/input';
+import { fieldClasses } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import type { Place } from '@/modules/geo/cities';
 import { searchPlacesAction } from '@/modules/geo/actions';
@@ -16,10 +16,12 @@ type Props = {
   onChange?: (place: Place | null) => void;
   /** Prefill (e.g. from URL params); the place is submitted without the user typing. */
   defaultPlace?: Place | null;
+  /** Replaces the default field styling of the text input (e.g. the borderless cells of the home search bar). */
+  inputClassName?: string;
 };
 
 /** Accessible combobox (ARIA 1.2 list autocomplete) that submits the chosen place as hidden inputs. */
-export function CityPicker({ name, id, placeholder, invalid, describedBy, onChange, defaultPlace = null }: Props) {
+export function CityPicker({ name, id, placeholder, invalid, describedBy, onChange, defaultPlace = null, inputClassName }: Props) {
   const listId = useId();
   const [text, setText] = useState(defaultPlace?.label ?? '');
   const [chosen, setChosen] = useState<Place | null>(defaultPlace);
@@ -94,7 +96,8 @@ export function CityPicker({ name, id, placeholder, invalid, describedBy, onChan
 
   return (
     <div className="relative">
-      <Input
+      <input
+        className={inputClassName ?? fieldClasses}
         id={id}
         type="text"
         role="combobox"

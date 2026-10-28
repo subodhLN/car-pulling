@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TZ } from '@/lib/time';
 import { TZDate } from '@date-fns/tz';
 import { format } from 'date-fns';
-import { CITIES, type LatLng } from '@/modules/geo/cities';
+import { CITIES, type LatLng, type Place } from '@/modules/geo/cities';
 
 export const SORTS = ['departure', 'price', 'pickup'] as const;
 export type SearchSort = (typeof SORTS)[number];
@@ -99,4 +99,29 @@ export function parseSearchParams(
     fromLabel,
     toLabel,
   };
+}
+
+/** Sets `key` to a CITIES slug when the place is one of ours, otherwise "lat,lng" plus a `${key}Label` param. */
+export function setPlaceParam(key: 'from' | 'to', place: Place | string, out: URLSearchParams): void {
+  if (typeof place === 'string') {
+    out.set(key, place);
+    return;
+  }
+  const city = CITIES.find((c) => c.label === place.label && c.lat === place.lat && c.lng === place.lng);
+  if (city) {
+    out.set(key, city.slug);
+  } else {
+    out.set(key, `${place.lat},${place.lng}`);
+    out.set(`${key}Label`, place.label);
+  }
+}
+
+/** A /search URL that parseSearchParams accepts. Places may be given as CITIES slugs. */
+export function searchHref(input: { from: Place | string; to: Place | string; date: string; seats?: number }): string {
+  const params = new URLSearchParams();
+  setPlaceParam('from', input.from, params);
+  setPlaceParam('to', input.to, params);
+  params.set('date', input.date);
+  if (input.seats !== undefined) params.set('seats', String(input.seats));
+  return `/search?${params.toString()}`;
 }

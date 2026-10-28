@@ -5,7 +5,8 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { CITIES, type Place } from '@/modules/geo/cities';
+import type { Place } from '@/modules/geo/cities';
+import { setPlaceParam } from '@/modules/trips/search-params';
 import { CityPicker } from './city-picker';
 
 export type SearchFormValues = {
@@ -16,17 +17,6 @@ export type SearchFormValues = {
   radius: number;
   sort: string;
 };
-
-/** A CITIES slug when the place is one of ours, otherwise "lat,lng" plus a label param. */
-function placeParams(key: 'from' | 'to', place: Place, out: URLSearchParams) {
-  const city = CITIES.find((c) => c.label === place.label && c.lat === place.lat && c.lng === place.lng);
-  if (city) {
-    out.set(key, city.slug);
-  } else {
-    out.set(key, `${place.lat},${place.lng}`);
-    out.set(`${key}Label`, place.label);
-  }
-}
 
 export function SearchForm({ initial }: { initial: SearchFormValues }) {
   const router = useRouter();
@@ -43,8 +33,8 @@ export function SearchForm({ initial }: { initial: SearchFormValues }) {
     setError(null);
     const data = new FormData(e.currentTarget);
     const params = new URLSearchParams();
-    placeParams('from', from, params);
-    placeParams('to', to, params);
+    setPlaceParam('from', from, params);
+    setPlaceParam('to', to, params);
     const date = String(data.get('date') ?? '');
     if (date) params.set('date', date);
     params.set('seats', String(data.get('seats') ?? '1'));
