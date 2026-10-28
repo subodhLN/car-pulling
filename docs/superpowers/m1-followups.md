@@ -27,3 +27,16 @@ Items found in M1 reviews and deliberately deferred. Pick them up in the milesto
 - Dashboard flash message isn't tied to a specific booking card.
 - `x-real-ip` is trusted first for rate limiting (correct on Vercel; revisit for any self-hosted deploy).
 - Test hardening: deterministic assertion of the deadlock-retry path; the tick batch test uses one trip; live route-card radius is covered only by a conditional e2e test.
+
+## M2 follow-ups (deferred from the M2 final review)
+- Prefix geo cache keys with the provider (`fake:` / `live:`) so local e2e runs can't seed fake results into local live dev.
+- Search map on phones always shows the first ride; add a per-row "Show on map" control and highlight the mapped row on desktop.
+- Resize refits discard the user's pan/zoom; theme switches replay the draw-in. Refit only until the user first moves the map.
+- Import `maplibre-gl.css` only in the map chunks instead of globally (~70 KB on every page).
+- Desktop search briefly shows the mobile "Show map" button before hydration (`useWide` server snapshot); drive it with CSS.
+- `npm run db:drift` doesn't load `.env` (use `node --env-file=.env` or document `set -a; . ./.env`).
+- Drop the picker's detail line when the label already ends with it; truncate Photon labels to 120 chars so publish can't fail on them.
+- Announce picker hints in the live region; note in the pin dialog that keyboard users can type a place instead.
+- `routeSummary` shows "3h 0m"; render "3h".
+- Short circuit-breaker for Photon (skip it ~60 s after a failure) so autocomplete stays snappy during an outage.
+- Prune expired `GeoCache` rows from the cron tick.
